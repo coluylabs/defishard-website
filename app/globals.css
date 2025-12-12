@@ -22,6 +22,10 @@
     @apply bg-white/5 backdrop-blur-xl border border-white/10;
   }
 
+  .glass-effect {
+    @apply bg-white/5 backdrop-blur-xl;
+  }
+
   .glass-strong {
     @apply bg-white/10 backdrop-blur-xl border border-white/20;
   }

@@ -70,7 +70,7 @@ export default function CTA() {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.4 }}
-                  className="glass-effect rounded-2xl p-8 border border-white/10"
+                  className="glass-effect rounded-2xl p-8 border border-white/10 flex flex-col"
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <Smartphone className="h-8 w-8 text-purple-400" />
