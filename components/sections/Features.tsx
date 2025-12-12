@@ -8,64 +8,65 @@ export default function Features() {
     {
       icon: Shield,
       title: 'MPC 2-of-2 Security',
-      description: 'Threshold signatures with secret sharing and zero-knowledge proofs. Your private key never exists—anywhere, ever.',
-      gradient: 'from-primary to-primary-dark',
+      description: 'Threshold signatures with secret sharing. Your private key never exists—anywhere, ever.',
+      id: '01'
     },
     {
       icon: Smartphone,
-      title: 'Mobile Transaction Review',
-      description: 'Review every detail on your phone. Catch scams before signing. Screenshot important transactions.',
-      gradient: 'from-secondary to-secondary-dark',
+      title: 'Mobile Review',
+      description: 'Review every detail on your phone. Catch scams before signing. Screenshot transactions.',
+      id: '02'
     },
     {
       icon: Globe,
-      title: 'Universal Compatibility',
-      description: 'Works with Uniswap, Aave, Compound, and all your favorite DeFi protocols. Support for Ethereum and major EVM chains.',
-      gradient: 'from-accent to-accent-dark',
+      title: 'Universal Compat',
+      description: 'Works with Uniswap, Aave, Compound, and all your favorite DeFi protocols.',
+      id: '03'
     },
     {
       icon: Zap,
       title: 'Seamless UX',
-      description: 'Quick QR code scanning. Transactions complete in seconds. Familiar 2FA-style workflow you already trust.',
-      gradient: 'from-success to-primary',
+      description: 'Quick QR code scanning. Transactions complete in seconds. Familiar 2FA-style workflow.',
+      id: '04'
     },
     {
       icon: Eye,
       title: 'Active Protection',
-      description: 'Real-time threat detection. Warning system for suspicious transactions. Automatic security updates.',
-      gradient: 'from-primary to-accent',
+      description: 'Real-time threat detection. Warning system for suspicious transactions. Auto updates.',
+      id: '05'
     },
     {
       icon: RotateCcw,
       title: 'Easy Recovery',
       description: 'Secure backup options and social recovery available. Never lose access to your assets.',
-      gradient: 'from-secondary to-success',
+      id: '06'
     },
   ]
 
   return (
-    <section id="features" className="section">
+    <section id="features" className="section bg-dark-bg">
       <div className="container-custom">
         {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-16"
+          className="mb-16 border-b border-dark-border pb-8"
         >
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-            Everything You Need
-            <br />
-            <span className="text-gradient">To Stay Secure</span>
+          <div className="text-xs font-mono text-brand-lime mb-4 uppercase tracking-wider">
+            // Core Capabilities
+          </div>
+          <h2 className="heading-lg mb-4">
+            Institutional Grade Security
           </h2>
           
-          <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-            Built with the security-conscious DeFi user in mind
+          <p className="text-xl text-brand-slate max-w-3xl">
+            Built with the security-conscious DeFi user in mind.
           </p>
         </motion.div>
 
         {/* Features Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-px bg-dark-border border border-dark-border">
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}
@@ -73,19 +74,25 @@ export default function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.1 }}
-              className="card group hover:scale-105 transition-transform"
+              className="bg-dark-surface p-8 group hover:bg-dark-elevated transition-colors relative"
             >
-              {/* Icon with gradient */}
-              <div className="relative mb-6">
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.gradient} p-3 shadow-glow`}>
-                  <feature.icon className="h-full w-full text-white" />
-                </div>
-                <div className={`absolute inset-0 blur-2xl bg-gradient-to-br ${feature.gradient} opacity-30 group-hover:opacity-50 transition-all`} />
+              {/* Technical Marker */}
+              <div className="absolute top-4 right-4 text-xs font-mono text-dark-border group-hover:text-brand-lime transition-colors">
+                {feature.id}
+              </div>
+
+              {/* Icon */}
+              <div className="mb-6 inline-flex p-3 rounded-md bg-dark-bg border border-dark-border group-hover:border-brand-lime/50 transition-colors">
+                <feature.icon className="h-6 w-6 text-brand-slate group-hover:text-brand-lime transition-colors" />
               </div>
 
               {/* Content */}
-              <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
-              <p className="text-gray-400 leading-relaxed">{feature.description}</p>
+              <h3 className="text-lg font-bold mb-3 text-brand-white group-hover:text-brand-lime transition-colors">
+                {feature.title}
+              </h3>
+              <p className="text-brand-slate text-sm leading-relaxed font-mono">
+                {feature.description}
+              </p>
             </motion.div>
           ))}
         </div>
@@ -93,4 +100,3 @@ export default function Features() {
     </section>
   )
 }
-

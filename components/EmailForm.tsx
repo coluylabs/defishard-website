@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ArrowRight, Loader2 } from 'lucide-react';
 
 export default function EmailForm() {
   const [email, setEmail] = useState('');
@@ -23,49 +24,63 @@ export default function EmailForm() {
 
       if (response.ok) {
         setStatus('success');
-        setMessage('✅ Successfully joined the waitlist!');
+        setMessage('✅ SUCCESS');
         setEmail('');
       } else {
         setStatus('error');
-        setMessage(data.error || 'Failed to join waitlist');
+        setMessage(`ERROR: ${data.error || 'FAILED'}`);
       }
     } catch (error) {
       setStatus('error');
-      setMessage('Network error. Please try again.');
+      setMessage('ERROR: NETWORK_FAILURE');
     }
   };
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-full">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2 w-full">
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="Enter your email"
+          placeholder="ENTER EMAIL ADDRESS"
           required
           disabled={status === 'loading'}
-          className="w-full px-6 py-4 rounded-xl bg-white/5 border border-white/10 
-                   text-white placeholder-white/40 focus:outline-none focus:border-blue-500/50
-                   disabled:opacity-50 transition-all"
+          className="w-full px-4 py-3 rounded-md bg-dark-bg border border-dark-border 
+                   text-brand-white placeholder-brand-slate/50 font-mono text-sm
+                   focus:outline-none focus:border-brand-lime focus:ring-1 focus:ring-brand-lime
+                   disabled:opacity-50 transition-all uppercase"
         />
         <button
           type="submit"
           disabled={status === 'loading'}
-          className="w-full px-8 py-4 rounded-xl font-semibold bg-gradient-to-r from-blue-500 to-purple-500
-                   hover:from-blue-600 hover:to-purple-600 disabled:opacity-50 disabled:cursor-not-allowed
-                   transition-all duration-300 hover:scale-[1.02] whitespace-nowrap"
+          className="w-full px-4 py-3 rounded-md font-mono text-sm font-bold bg-brand-lime text-primary-text
+                   hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed
+                   transition-all flex items-center justify-center gap-2 uppercase tracking-wide"
         >
-          {status === 'loading' ? 'Joining...' : 'Join'}
+          {status === 'loading' ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>PROCESSING...</span>
+            </>
+          ) : (
+            <>
+              <span>JOIN WAITLIST</span>
+              <ArrowRight className="h-4 w-4" />
+            </>
+          )}
         </button>
       </form>
       
       {message && (
-        <p className={`text-sm ${status === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+        <div className={`text-xs font-mono p-2 border rounded-md ${
+          status === 'success' 
+            ? 'border-green-500/30 text-green-500 bg-green-500/5' 
+            : 'border-red-500/30 text-red-500 bg-red-500/5'
+        }`}>
           {message}
-        </p>
+        </div>
       )}
     </div>
   );
 }
-

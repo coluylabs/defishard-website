@@ -1,41 +1,41 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowRight, Chrome, Smartphone } from 'lucide-react'
-import EmailForm from '../EmailForm'
+import { ArrowRight, Chrome, Smartphone, ShieldCheck } from 'lucide-react'
 
 export default function CTA() {
   return (
-    <section id="cta" className="section">
+    <section id="cta" className="section bg-dark-bg">
       <div className="container-custom">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="relative overflow-hidden rounded-3xl"
+          className="relative bg-dark-surface border border-dark-border rounded-lg overflow-hidden"
         >
-          {/* Background */}
-          <div className="absolute inset-0 animated-gradient" />
-          <div className="absolute inset-0 bg-dark-bg/50 backdrop-blur-sm" />
+          {/* Top Border Accent */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-brand-lime" />
           
-          {/* Content */}
-          <div className="relative z-10 p-12 md:p-20 text-center">
+          <div className="p-8 md:p-16 text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.2 }}
-              className="space-y-8"
+              className="space-y-12"
             >
-              <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold">
-                Secure Your DeFi
-                <br />
-                <span className="text-gradient">Today</span>
-              </h2>
-              
-              <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-                Join thousands of users who sleep better knowing their assets are protected by distributed key technology
-              </p>
+              <div className="space-y-6">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-lime/10 border border-brand-lime/20 rounded-full text-brand-lime">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider">Production Ready v1.4.0</span>
+                </div>
+                
+                <h2 className="heading-xl">
+                  Secure Your Assets. <br />
+                  <span className="text-brand-lime">Eliminate the Risk.</span>
+                </h2>
+                
+              </div>
 
               {/* Download Options */}
               <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
@@ -45,22 +45,36 @@ export default function CTA() {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.3 }}
-                  className="glass-effect rounded-2xl p-8 border border-white/10"
+                  className="bg-dark-elevated border border-dark-border p-8 rounded-lg text-left hover:border-brand-lime/50 transition-colors relative"
                 >
-                  <div className="flex items-center gap-3 mb-4">
-                    <Chrome className="h-8 w-8 text-blue-400" />
-                    <h3 className="text-2xl font-bold">Browser Extension</h3>
+                  <div className="absolute top-4 right-4 bg-dark-bg border border-dark-border px-3 py-1 text-xs font-mono text-brand-white rounded-full">
+                    STEP 1
                   </div>
-                  <p className="text-gray-300 mb-6">
-                    For Chrome, Brave, and Edge
-                  </p>
+                  
+                  <div className="flex items-start justify-between mb-8">
+                    <div>
+                      <Chrome className="h-8 w-8 text-brand-white mb-4" />
+                      <h3 className="text-xl font-bold font-mono text-brand-white">Extension</h3>
+                      <p className="text-sm text-brand-slate font-mono mt-1">v1.4.0 (Stable)</p>
+                    </div>
+                  </div>
+                  
+                  <ul className="space-y-3 mb-8 text-sm text-brand-slate font-mono">
+                    <li className="flex gap-2"><span className="text-brand-lime">✓</span> Chrome, Brave, Edge</li>
+                    <li className="flex gap-2"><span className="text-brand-lime">✓</span> Generates Share #1</li>
+                    <li className="flex gap-2"><span className="text-brand-lime">✓</span> Audited Protocol</li>
+                  </ul>
+
                   <a
-                    href="/defishard-wallet-v1.4.0.zip"
-                    download
-                    className="btn-primary w-full text-lg px-6 py-4 shadow-glow-lg inline-flex items-center justify-center gap-2"
+                    href="#cta"
+                    className="btn-primary w-full justify-center"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document.getElementById('cta')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
                   >
                     <span>Download Extension</span>
-                    <ArrowRight className="h-5 w-5" />
+                    <ArrowRight className="h-4 w-4" />
                   </a>
                 </motion.div>
 
@@ -70,72 +84,58 @@ export default function CTA() {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: 0.4 }}
-                  className="glass-effect rounded-2xl p-8 border border-white/10 flex flex-col"
+                  className="bg-dark-elevated border border-dark-border p-8 rounded-lg text-left hover:border-brand-slate transition-colors relative"
                 >
-                  <div className="flex items-center gap-3 mb-4">
-                    <Smartphone className="h-8 w-8 text-purple-400" />
-                    <h3 className="text-2xl font-bold">Mobile App</h3>
+                  <div className="absolute top-4 right-4 bg-dark-bg border border-dark-border px-3 py-1 text-xs font-mono text-brand-white rounded-full">
+                    STEP 2
                   </div>
-                  <p className="text-gray-300 mb-4">
-                    For Android (Beta Testing)
+
+                  <div className="flex items-start justify-between mb-8">
+                    <div>
+                      <Smartphone className="h-8 w-8 text-brand-white mb-4" />
+                      <h3 className="text-xl font-bold font-mono text-brand-white">Mobile Authenticator</h3>
+                      <p className="text-sm text-brand-slate font-mono mt-1">v1.2.0 (Beta)</p>
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-brand-slate font-mono mb-8 h-[88px]">
+                    Required to generate Share #2 and approve transactions. Your phone becomes your hardware wallet.
                   </p>
+
                   <a
-                    href="/defishard-v1.2.0-1763367532-20251117_151937.apk"
-                    download
-                    className="btn-primary w-full text-lg px-6 py-4 shadow-glow-lg inline-flex items-center justify-center gap-2 mb-6"
+                    href="#cta"
+                    className="btn-primary w-full justify-center mb-8"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      document.getElementById('cta')?.scrollIntoView({ behavior: 'smooth' });
+                    }}
                   >
                     <span>Download APK</span>
-                    <ArrowRight className="h-5 w-5" />
+                    <ArrowRight className="h-4 w-4" />
                   </a>
-                  <div className="border-t border-white/10 pt-6">
-                    <p className="text-gray-300 mb-4 text-sm">
-                      Join waitlist for iOS release
-                    </p>
-                    <EmailForm />
-                  </div>
+
                 </motion.div>
               </div>
 
               {/* Trust Indicators */}
-              <div className="flex flex-wrap justify-center items-center gap-8 pt-8">
+              <div className="flex flex-wrap justify-center items-center gap-12 pt-8 border-t border-dark-border">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-white">Free Forever</div>
-                  <div className="text-sm text-gray-400">No hidden fees</div>
+                  <div className="text-lg font-bold font-mono text-brand-white">OPEN SOURCE</div>
+                  <div className="text-xs font-mono text-brand-slate">MIT LICENSE</div>
                 </div>
-                <div className="h-8 w-px bg-white/20" />
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-white">1 Minute</div>
-                  <div className="text-sm text-gray-400">Setup time</div>
+                  <div className="text-lg font-bold font-mono text-brand-white">NON-CUSTODIAL</div>
+                  <div className="text-xs font-mono text-brand-slate">YOU HOLD THE SHARES</div>
                 </div>
-                <div className="h-8 w-px bg-white/20" />
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-white">All Chains</div>
-                  <div className="text-sm text-gray-400">EVM compatible</div>
+                  <div className="text-lg font-bold font-mono text-brand-white">EVM COMPATIBLE</div>
+                  <div className="text-xs font-mono text-brand-slate">ALL CHAINS</div>
                 </div>
               </div>
             </motion.div>
           </div>
-
-          {/* Decorative elements */}
-          <motion.div
-            animate={{ 
-              scale: [1, 1.2, 1],
-              rotate: 360 
-            }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            className="absolute -top-20 -left-20 w-40 h-40 bg-primary/20 rounded-full blur-3xl"
-          />
-          <motion.div
-            animate={{ 
-              scale: [1, 1.3, 1],
-              rotate: -360 
-            }}
-            transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-            className="absolute -bottom-20 -right-20 w-60 h-60 bg-secondary/20 rounded-full blur-3xl"
-          />
         </motion.div>
       </div>
     </section>
   )
 }
-

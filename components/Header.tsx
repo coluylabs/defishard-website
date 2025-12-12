@@ -18,7 +18,6 @@ export default function Header() {
 
   const navItems = [
     { label: 'Features', href: '#features' },
-    { label: 'Security', href: '#security' },
     { label: 'How It Works', href: '#how-it-works' },
     { label: 'FAQ', href: '#faq' },
   ]
@@ -28,7 +27,9 @@ export default function Header() {
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        isScrolled ? 'glass py-4' : 'bg-transparent py-6'
+        isScrolled 
+          ? 'bg-dark-bg/95 backdrop-blur-md border-b border-dark-border py-4' 
+          : 'bg-transparent py-6'
       }`}
     >
       <div className="container-custom">
@@ -36,10 +37,9 @@ export default function Header() {
           {/* Logo */}
           <a href="/" className="flex items-center gap-2 group">
             <div className="relative">
-              <Shield className="h-8 w-8 text-primary group-hover:text-primary-light transition-colors" />
-              <div className="absolute inset-0 blur-xl bg-primary/30 group-hover:bg-primary/50 transition-all" />
+              <Shield className="h-8 w-8 text-brand-lime transition-transform group-hover:scale-110" strokeWidth={2.5} />
             </div>
-            <span className="text-2xl font-bold text-gradient">DefiShard</span>
+            <span className="text-xl font-bold font-mono tracking-tighter text-brand-white">DEFISHARD</span>
           </a>
 
           {/* Desktop Navigation */}
@@ -48,24 +48,29 @@ export default function Header() {
               <a
                 key={item.label}
                 href={item.href}
-                className="text-gray-300 hover:text-white transition-colors relative group"
+                className="text-sm font-mono text-brand-slate hover:text-brand-lime transition-colors relative group uppercase tracking-wide"
               >
+                <span className="text-brand-lime opacity-0 group-hover:opacity-100 transition-opacity mr-1">&gt;</span>
                 {item.label}
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-primary to-secondary group-hover:w-full transition-all duration-300" />
               </a>
             ))}
           </nav>
 
           {/* CTA Button */}
           <div className="hidden md:block">
-            <button className="btn-primary">
-              <span>Download Now</span>
+            <button 
+              className="btn-primary"
+              onClick={() => {
+                document.getElementById('cta')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              <span>Download</span>
             </button>
           </div>
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2 text-white hover:text-primary transition-colors"
+            className="md:hidden p-2 text-brand-white hover:text-brand-lime transition-colors border border-dark-border rounded-md"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? (
@@ -84,25 +89,28 @@ export default function Header() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden glass-strong mt-4 rounded-2xl overflow-hidden"
+            className="md:hidden bg-dark-surface border-b border-dark-border overflow-hidden"
           >
-            <div className="p-6 space-y-4">
+            <div className="container-custom py-6 space-y-4">
               {navItems.map((item, index) => (
                 <motion.a
                   key={item.label}
                   href={item.href}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="block text-gray-300 hover:text-white transition-colors"
+                  transition={{ delay: index * 0.05 }}
+                  className="block text-brand-slate hover:text-brand-lime font-mono uppercase tracking-wide py-2 border-b border-dark-border last:border-0"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
+                  <span className="text-brand-lime mr-2">&gt;</span>
                   {item.label}
                 </motion.a>
               ))}
-              <button className="btn-primary w-full justify-center mt-4">
-                Download Now
-              </button>
+              <div className="pt-4">
+                <button className="btn-primary w-full">
+                  Download App
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -110,4 +118,3 @@ export default function Header() {
     </motion.header>
   )
 }
-
