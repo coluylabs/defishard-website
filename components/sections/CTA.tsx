@@ -1,7 +1,8 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowRight, Chrome, Smartphone, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Chrome, Smartphone, ShieldCheck, Download } from 'lucide-react'
+import EmailForm from '../EmailForm'
 
 export default function CTA() {
   return (
@@ -35,6 +36,11 @@ export default function CTA() {
                   <span className="text-brand-lime">Eliminate the Risk.</span>
                 </h2>
                 
+                <div className="space-y-2">
+                  <p className="text-xl text-brand-slate max-w-2xl mx-auto font-mono">
+                    Join thousands of institutional and retail users migrating to MPC security architecture.
+                  </p>
+                </div>
               </div>
 
               {/* Download Options */}
@@ -66,12 +72,9 @@ export default function CTA() {
                   </ul>
 
                   <a
-                    href="#cta"
+                    href="/defishard-wallet-v1.4.0.zip"
+                    download
                     className="btn-primary w-full justify-center"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      document.getElementById('cta')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
                   >
                     <span>Download Extension</span>
                     <ArrowRight className="h-4 w-4" />
@@ -103,17 +106,20 @@ export default function CTA() {
                   </p>
 
                   <a
-                    href="#cta"
-                    className="btn-primary w-full justify-center mb-8"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      document.getElementById('cta')?.scrollIntoView({ behavior: 'smooth' });
-                    }}
+                    href="/defishard-v1.2.0-1763367532-20251117_151937.apk"
+                    download
+                    className="btn-secondary w-full justify-center mb-8"
                   >
                     <span>Download APK</span>
                     <ArrowRight className="h-4 w-4" />
                   </a>
 
+                  <div className="border-t border-dark-border pt-6">
+                    <p className="text-xs font-mono text-brand-slate mb-4 uppercase tracking-wider">
+                      Waitlist for iOS
+                    </p>
+                    <EmailForm />
+                  </div>
                 </motion.div>
               </div>
 
