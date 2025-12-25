@@ -24,6 +24,7 @@ const config: Config = {
         primary: {
           DEFAULT: '#CCFF00', // Electric Lime
           hover: '#B3E600',
+          light: '#E0FF66',
           text: '#000000',    // Text on primary
         },
         secondary: {

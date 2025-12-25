@@ -1,64 +1,73 @@
 'use client'
 
 import { Shield, Twitter, Send, Github } from 'lucide-react'
-import EmailForm from './EmailForm'
 
 export default function Footer() {
   const footerLinks = {
-    PRODUCT: [
+    Product: [
       { label: 'Features', href: '#features' },
+      { label: 'Security', href: '#security' },
       { label: 'How It Works', href: '#how-it-works' },
+      { label: 'Documentation', href: '#' },
     ],
-    LEGAL: [
+    Community: [
+      { label: 'Twitter', href: '#' },
+      { label: 'Telegram', href: '#' },
+      { label: 'GitHub', href: '#' },
+    ],
+    Legal: [
       { label: 'Privacy Policy', href: '/privacy' },
       { label: 'Terms of Service', href: '/terms' },
       { label: 'Cookie Policy', href: '/cookies' },
     ],
-    SOCIAL: [
-      { label: 'Twitter', href: '#', icon: Twitter },
-      { label: 'Telegram', href: '#', icon: Send },
-      { label: 'GitHub', href: '#', icon: Github },
-    ],
   }
 
+  const socialLinks = [
+    { icon: Twitter, href: '#', label: 'Twitter' },
+    { icon: Send, href: '#', label: 'Telegram' },
+    { icon: Github, href: '#', label: 'GitHub' },
+  ]
+
   return (
-    <footer className="py-20 px-4 sm:px-6 lg:px-8 bg-dark-bg border-t border-dark-border">
+    <footer className="section pt-20 pb-8 border-t border-white/10">
       <div className="container-custom">
         {/* Main Footer Content */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-12 mb-16">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-12">
           {/* Logo & Description */}
-          <div className="col-span-2 md:col-span-2">
-            <div className="flex items-center gap-2 mb-6">
-              <Shield className="h-6 w-6 text-brand-lime" />
-              <span className="text-lg font-bold font-mono tracking-tighter text-brand-white">DEFISHARD</span>
+          <div className="col-span-2 md:col-span-1">
+            <div className="flex items-center gap-2 mb-4">
+              <Shield className="h-8 w-8 text-primary" />
+              <span className="text-2xl font-bold text-gradient">DefiShard</span>
             </div>
-            <p className="text-sm font-mono text-brand-slate mb-8 max-w-xs leading-relaxed">
-              Institutional grade MPC security infrastructure for the decentralized web.
+            <p className="text-sm text-gray-400 mb-4">
+              Securing DeFi, one distributed key at a time
             </p>
-
-            {/* Waitlist */}
-            <div className="max-w-xs">
-              <p className="text-xs font-mono text-brand-slate mb-4 uppercase tracking-wider">
-                Waitlist for iOS
-              </p>
-              <EmailForm />
+            {/* Social Links */}
+            <div className="flex gap-3">
+              {socialLinks.map((social) => (
+                <a
+                  key={social.label}
+                  href={social.href}
+                  className="w-10 h-10 glass-strong rounded-xl flex items-center justify-center hover:border-primary/50 transition-all group"
+                  aria-label={social.label}
+                >
+                  <social.icon className="h-5 w-5 text-gray-400 group-hover:text-primary transition-colors" />
+                </a>
+              ))}
             </div>
           </div>
 
           {/* Link Columns */}
           {Object.entries(footerLinks).map(([category, links]) => (
             <div key={category}>
-              <h3 className="text-xs font-bold font-mono text-brand-white uppercase mb-6 tracking-wider">
-                {category}
-              </h3>
-              <ul className="space-y-4">
-                {links.map((link: any) => (
+              <h3 className="font-semibold mb-4">{category}</h3>
+              <ul className="space-y-3">
+                {links.map((link) => (
                   <li key={link.label}>
                     <a
                       href={link.href}
-                      className="text-sm font-mono text-brand-slate hover:text-brand-lime transition-colors flex items-center gap-2"
+                      className="text-sm text-gray-400 hover:text-white transition-colors"
                     >
-                      {link.icon && <link.icon className="h-4 w-4" />}
                       {link.label}
                     </a>
                   </li>
@@ -68,13 +77,21 @@ export default function Footer() {
           ))}
         </div>
 
+        {/* Divider */}
+        <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-8" />
+
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-dark-border flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-xs font-mono text-brand-slate">
-            © 2025 DEFISHARD. ALL RIGHTS RESERVED.
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-sm text-gray-400">
+            © 2025 DefiShard. All rights reserved.
           </p>
+          
+          <div className="flex items-center gap-6 text-sm text-gray-400">
+            <span>Built for DeFi security</span>
+          </div>
         </div>
       </div>
     </footer>
   )
 }
+

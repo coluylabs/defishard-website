@@ -65,6 +65,20 @@
   .container-custom {
     @apply max-w-7xl mx-auto;
   }
+
+  /* Glass Morphism Effects */
+  .glass {
+    @apply bg-dark-bg/80 backdrop-blur-lg border-b border-dark-border/50;
+  }
+
+  .glass-strong {
+    @apply bg-dark-surface/90 backdrop-blur-xl border border-dark-border/50;
+  }
+
+  /* Text Gradient */
+  .text-gradient {
+    @apply bg-gradient-to-r from-brand-lime to-brand-white bg-clip-text text-transparent;
+  }
 }
 
 /* Custom Scrollbar */
