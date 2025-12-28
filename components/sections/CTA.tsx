@@ -28,7 +28,7 @@ export default function CTA() {
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-brand-lime/10 border border-brand-lime/20 rounded-full text-brand-lime">
                   <ShieldCheck className="h-4 w-4" />
-                  <span className="text-xs font-mono font-bold uppercase tracking-wider">Production Ready v1.4.0</span>
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider">First Public Release v1.0.0</span>
                 </div>
                 
                 <h2 className="heading-xl">
@@ -61,18 +61,18 @@ export default function CTA() {
                     <div>
                       <Chrome className="h-8 w-8 text-brand-white mb-4" />
                       <h3 className="text-xl font-bold font-mono text-brand-white">Extension</h3>
-                      <p className="text-sm text-brand-slate font-mono mt-1">v1.4.0 (Stable)</p>
+                      <p className="text-sm text-brand-slate font-mono mt-1">v1.0.0</p>
                     </div>
                   </div>
                   
                   <ul className="space-y-3 mb-8 text-sm text-brand-slate font-mono">
                     <li className="flex gap-2"><span className="text-brand-lime">✓</span> Chrome, Brave, Edge</li>
                     <li className="flex gap-2"><span className="text-brand-lime">✓</span> Generates Share #1</li>
-                    <li className="flex gap-2"><span className="text-brand-lime">✓</span> Audited Protocol</li>
+                    <li className="flex gap-2"><span className="text-brand-lime">✓</span> MPC Protocol</li>
                   </ul>
 
                   <a
-                    href="/defishard-wallet-v1.4.0.zip"
+                    href="/defishard-wallet-v1.0.0.zip"
                     download
                     className="btn-primary w-full justify-center"
                   >
@@ -97,7 +97,7 @@ export default function CTA() {
                     <div>
                       <Smartphone className="h-8 w-8 text-brand-white mb-4" />
                       <h3 className="text-xl font-bold font-mono text-brand-white">Mobile Authenticator</h3>
-                      <p className="text-sm text-brand-slate font-mono mt-1">v1.2.0 (Beta)</p>
+                      <p className="text-sm text-brand-slate font-mono mt-1">v1.0.0</p>
                     </div>
                   </div>
 
@@ -106,7 +106,7 @@ export default function CTA() {
                   </p>
 
                   <a
-                    href="/defishard-v1.2.0-1763367532-20251117_151937.apk"
+                    href="/defishard-v1.0.0.apk"
                     download
                     className="btn-secondary w-full justify-center mb-8"
                   >

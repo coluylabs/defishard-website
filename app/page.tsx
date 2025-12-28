@@ -2,6 +2,7 @@ import Hero from '@/components/sections/Hero'
 import Problem from '@/components/sections/Problem'
 import HowItWorks from '@/components/sections/HowItWorks'
 import Features from '@/components/sections/Features'
+import Demo from '@/components/sections/Demo'
 import Security from '@/components/sections/Security'
 import Stats from '@/components/sections/Stats'
 import FAQ from '@/components/sections/FAQ'
@@ -18,6 +19,7 @@ export default function Home() {
       <Problem />
       <HowItWorks />
       <Features />
+      <Demo />
       <Security />
       <FAQ />
       <CTA />

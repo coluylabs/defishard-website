@@ -46,7 +46,7 @@ export default function Hero() {
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-4">
               <a
-                href="/defishard-wallet-v1.4.0.zip"
+                href="/defishard-wallet-v1.0.0.zip"
                 download
                 className="btn-primary text-lg px-8 py-4 inline-flex"
               >
@@ -66,16 +66,16 @@ export default function Hero() {
             {/* Trust Indicators */}
             <div className="flex flex-wrap items-center gap-8 pt-8">
               <div>
-                <div className="text-3xl font-bold text-gradient">50K+</div>
-                <div className="text-sm text-gray-400">Protected Users</div>
+                <div className="text-3xl font-bold text-gradient">v1.0.0</div>
+                <div className="text-sm text-gray-400">First Public Release</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-gradient">$100M+</div>
-                <div className="text-sm text-gray-400">Assets Secured</div>
+                <div className="text-3xl font-bold text-gradient">2-of-2</div>
+                <div className="text-sm text-gray-400">MPC Threshold</div>
               </div>
               <div>
                 <div className="text-3xl font-bold text-success">Zero</div>
-                <div className="text-sm text-gray-400">Breaches</div>
+                <div className="text-sm text-gray-400">Single Point of Failure</div>
               </div>
             </div>
 
