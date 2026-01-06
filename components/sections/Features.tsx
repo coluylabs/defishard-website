@@ -57,11 +57,11 @@ export default function Features() {
             // Core Capabilities
           </div>
           <h2 className="heading-lg mb-4">
-            Institutional Grade Security
+            Everything You Need
           </h2>
           
           <p className="text-xl text-brand-slate max-w-3xl">
-            Built with the security-conscious DeFi user in mind.
+            Powerful features designed for the security-conscious DeFi user.
           </p>
         </motion.div>
 
