@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   keywords: ['DeFi security', 'MPC wallet', 'distributed key generation', 'threshold signatures', 'Web3 security', 'crypto wallet'],
   icons: {
     icon: '/icon.png',
-    apple: '/icon.png',
+    apple: '/apple-icon.png',
   },
 }
 
