@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { ArrowRight, Chrome, Smartphone, ShieldCheck, Download } from 'lucide-react'
+import { ArrowRight, Chrome, Smartphone, ShieldCheck } from 'lucide-react'
 import EmailForm from '../EmailForm'
 
 export default function CTA() {
@@ -38,7 +38,7 @@ export default function CTA() {
                 
                 <div className="space-y-2">
                   <p className="text-xl text-brand-slate max-w-2xl mx-auto font-mono">
-                    Join thousands of institutional and retail users migrating to MPC security architecture.
+                    Experience the next generation of wallet security with MPC technology.
                   </p>
                 </div>
               </div>
@@ -53,15 +53,15 @@ export default function CTA() {
                   transition={{ delay: 0.3 }}
                   className="bg-dark-elevated border border-dark-border p-8 rounded-lg text-left hover:border-brand-lime/50 transition-colors relative"
                 >
-                  <div className="absolute top-4 right-4 bg-dark-bg border border-dark-border px-3 py-1 text-xs font-mono text-brand-white rounded-full">
+                  <div className="absolute top-4 right-4 bg-brand-lime/20 border border-brand-lime/30 px-3 py-1 text-xs font-mono text-brand-lime rounded-full">
                     STEP 1
                   </div>
                   
                   <div className="flex items-start justify-between mb-8">
                     <div>
                       <Chrome className="h-8 w-8 text-brand-white mb-4" />
-                      <h3 className="text-xl font-bold font-mono text-brand-white">Extension</h3>
-                      <p className="text-sm text-brand-slate font-mono mt-1">v1.0.0</p>
+                      <h3 className="text-xl font-bold font-mono text-brand-white">Chrome Extension</h3>
+                      <p className="text-sm text-brand-lime font-mono mt-1">Available on Chrome Web Store</p>
                     </div>
                   </div>
                   
@@ -72,11 +72,12 @@ export default function CTA() {
                   </ul>
 
                   <a
-                    href="/defishard-wallet-v1.0.0.zip"
-                    download
+                    href="https://chromewebstore.google.com/search/DeFiShard%20Wallet"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="btn-primary w-full justify-center"
                   >
-                    <span>Download Extension</span>
+                    <span>Add to Chrome</span>
                     <ArrowRight className="h-4 w-4" />
                   </a>
                 </motion.div>

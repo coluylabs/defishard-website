@@ -14,7 +14,7 @@ export default function Security() {
     {
       icon: Lock,
       title: 'End-to-End Encryption',
-      description: 'All communication between devices uses military-grade encryption. Zero-knowledge architecture means we never see your keys.',
+      description: 'All communication between devices uses bank-grade encryption. Zero-knowledge architecture means we never see your keys.',
       id: 'SEC_02'
     },
     {

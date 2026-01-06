@@ -14,7 +14,7 @@ export default function FAQ() {
     },
     {
       question: 'What if I lose my phone?',
-      answer: 'You can recover using your backup device, social recovery contacts, or encrypted seed phrase backup. Losing your phone doesn\'t mean losing your assets—you just need to set up recovery options during initial setup.',
+      answer: 'You can recover your wallet using your encrypted backup file. We strongly recommend storing your backup file in a safe location such as cloud storage (Google Drive, iCloud, Dropbox) or an external drive. Make sure to create your backup during initial setup—it\'s your key to recovery.',
     },
     {
       question: 'Does this work with all DeFi apps?',

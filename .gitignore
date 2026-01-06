@@ -36,3 +36,6 @@ next-env.d.ts
 
 # DefiShard data
 /data/
+
+# Deployment scripts (keep private)
+/scripts/

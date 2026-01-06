@@ -78,7 +78,7 @@ export default function Demo() {
               {isPlaying ? (
                 <video
                   ref={videoRef}
-                  src="/DeFiShard-Demo.mp4"
+                  src="/defishard-demo.mp4"
                   controls
                   autoPlay
                   className="absolute inset-0 w-full h-full object-contain bg-black"
