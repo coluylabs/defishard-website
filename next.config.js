@@ -7,19 +7,16 @@ const nextConfig = {
     unoptimized: true,
   },
   
-  // Reduce build output size
-  output: 'standalone',
-  
   // Disable source maps in production
   productionBrowserSourceMaps: false,
   
   // Optimize for production
   swcMinify: true,
   
-  // Ignore large files during build
-  webpack: (config, { isServer }) => {
+  // Exclude large files from webpack processing
+  webpack: (config) => {
     config.module.rules.push({
-      test: /\.(mp4|webm|ogg|mp3|wav|flac|aac|apk|zip)$/,
+      test: /\.(mp4|webm|ogg|mp3|wav|flac|aac)$/,
       type: 'asset/resource',
     })
     return config
