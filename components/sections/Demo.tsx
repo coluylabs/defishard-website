@@ -81,6 +81,8 @@ export default function Demo() {
                   src="/defishard-demo.mp4"
                   controls
                   autoPlay
+                  preload="none"
+                  playsInline
                   className="absolute inset-0 w-full h-full object-contain bg-black"
                 >
                   Your browser does not support the video tag.
