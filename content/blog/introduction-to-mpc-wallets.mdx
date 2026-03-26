@@ -1,0 +1,112 @@
+---
+title: "Introduction to MPC Wallets: Why Your Key Should Never Exist"
+date: "2026-01-11"
+author: "DeFiShard Team"
+description: "Learn how Multi-Party Computation (MPC) eliminates single points of failure in crypto wallet security by ensuring your private key never exists in complete form."
+tags: ["MPC", "Security", "Tutorial"]
+---
+
+The crypto industry has a security problem. Every year, billions of dollars are lost to hacks, phishing attacks, and human error—all stemming from one fundamental flaw: **the private key exists**.
+
+Whether it's stored on a hardware wallet, encrypted on your computer, or written on a piece of paper in your safe, that single key is the ultimate single point of failure.
+
+## The Problem with Traditional Wallets
+
+Traditional wallets, whether software or hardware, all share the same vulnerability:
+
+1. **Hot Wallets**: Your key exists in memory, vulnerable to malware and exploits
+2. **Hardware Wallets**: Your key exists on the device, vulnerable to physical theft or supply chain attacks
+3. **Paper Wallets**: Your key exists in written form, vulnerable to loss, theft, or destruction
+
+> The key must exist somewhere, right? **Wrong.**
+
+## Enter Multi-Party Computation
+
+MPC (Multi-Party Computation) is a cryptographic technique that allows multiple parties to jointly compute a function without any party revealing their input to the others.
+
+For wallets, this means:
+
+- Your private key is **never generated in complete form**
+- Instead, multiple **key shares** are created independently
+- Signatures are computed **collaboratively** without reconstructing the key
+
+<Callout type="success" title="Key Insight">
+With MPC, your complete private key never exists at any point in time—not during creation, not during signing, not ever.
+</Callout>
+
+### How DeFiShard Uses MPC
+
+DeFiShard implements a 2-of-2 threshold signature scheme. Here's how it works:
+
+<Mermaid chart={`
+flowchart LR
+    subgraph extension [Browser Extension]
+        S1[Share 1]
+    end
+    subgraph mobile [Mobile Device]
+        S2[Share 2]
+    end
+    subgraph signing [Signing Process]
+        PS1[Partial Sig 1]
+        PS2[Partial Sig 2]
+        FS[Full Signature]
+    end
+    S1 --> PS1
+    S2 --> PS2
+    PS1 --> FS
+    PS2 --> FS
+`} />
+
+When you sign a transaction:
+
+1. The browser extension creates a **partial signature** using Share #1
+2. Your mobile device creates a **partial signature** using Share #2
+3. These are combined into a **valid signature** without either share leaving its device
+
+```typescript
+// Simplified example of distributed key generation
+const share1 = generateShareOnExtension()  // Browser extension
+const share2 = generateShareOnMobile()      // Mobile device
+
+// The full private key is NEVER computed
+// Shares remain on their respective devices
+```
+
+## Security Benefits
+
+| Threat | Traditional Wallet | MPC Wallet |
+|--------|-------------------|------------|
+| Malware on computer | Key exposed | Only partial share |
+| Phone stolen | N/A | Useless without extension |
+| Phishing attack | Key can be stolen | Requires both devices |
+| Supply chain attack | Single point of failure | Two independent devices |
+
+<Callout type="warning" title="Important">
+Even if an attacker compromises one device, they only get one share—which is mathematically useless without the other share.
+</Callout>
+
+## The User Experience
+
+Despite its sophisticated cryptography, using an MPC wallet feels familiar:
+
+1. **Install the extension** → Generates Share #1
+2. **Pair your phone** → Generates Share #2 via QR code
+3. **Sign transactions** → Approve on mobile, like 2FA
+
+The complexity is hidden. You get hardware wallet security with software wallet convenience.
+
+## Getting Started
+
+Ready to eliminate single points of failure?
+
+1. Install the DeFiShard Extension (coming soon to the Chrome Web Store)
+2. Download the mobile app
+3. Create your first MPC wallet
+
+<Callout type="info">
+Your key will never exist. Your assets will always be safe.
+</Callout>
+
+---
+
+*Have questions about MPC security? Reach out at [info@defishard.com](mailto:info@defishard.com)*

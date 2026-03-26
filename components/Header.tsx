@@ -17,10 +17,11 @@ export default function Header() {
   }, [])
 
   const navItems = [
-    { label: 'Features', href: '#features' },
-    { label: 'Security', href: '#security' },
-    { label: 'How It Works', href: '#how-it-works' },
-    { label: 'FAQ', href: '#faq' },
+    { label: 'Features', href: '/#features' },
+    { label: 'Security', href: '/#security' },
+    { label: 'How It Works', href: '/#how-it-works' },
+    { label: 'FAQ', href: '/#faq' },
+    { label: 'Blog', href: '/blog' },
   ]
 
   return (
