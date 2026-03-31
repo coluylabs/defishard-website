@@ -1,0 +1,344 @@
+---
+title: "DefiShard Architecture Deep Dive: How MPC 2-of-2 Secures Your DeFi Assets"
+date: "2026-03-31"
+author: "DeFiShard Team"
+description: "A comprehensive technical exploration of DefiShard's three-component MPC architecture — browser extension, mobile authenticator, and relay server — and why your private key should never exist."
+tags: ["Architecture", "MPC", "Security", "Technical", "DeFi"]
+---
+
+The DeFi ecosystem has crossed trillions in total value locked, yet the fundamental security model of most wallets hasn't changed since Bitcoin's early days: **generate a private key, store it somewhere, hope nobody steals it.**
+
+That model is broken. DefiShard replaces it entirely.
+
+This post is a technical deep dive into DefiShard's architecture — how MPC 2-of-2 threshold signatures work, how our three-component system eliminates single points of failure, and why "your key never exists" isn't marketing copy. It's a cryptographic guarantee.
+
+## The DeFi Security Landscape
+
+The numbers speak for themselves. Since 2022, over **$1 billion** has been lost to wallet-related security breaches — not theoretical risks, but real incidents affecting real users:
+
+- **Ronin Network** (March 2022) — $625M stolen via compromised private keys
+- **Slope Wallet** (August 2022) — $8M+ drained from 9,000+ wallets after keys were logged to a server
+- **LastPass Breach** (December 2022) — $35M+ in crypto stolen after password manager data was compromised
+- **Atomic Wallet** (June 2023) — $100M+ stolen from 5,500+ wallets due to a software vulnerability
+
+<Mermaid chart={`
+pie title DeFi Losses by Attack Vector (2022-2023)
+    "Compromised Private Keys" : 625
+    "Wallet Software Vulnerability" : 100
+    "Password Manager Breach" : 35
+    "Server-Side Key Logging" : 8
+`} />
+
+Every single one of these attacks traces back to the same root cause: **the private key existed as a complete entity** — in memory, on disk, in a backup, on a server. It was a single artifact that, once captured, gave the attacker everything.
+
+Hardware wallets improve the situation by isolating the key on a dedicated device, but they introduce friction that makes them impractical for active DeFi usage. Multi-signature wallets distribute control but require on-chain contracts, gas overhead, and complex coordination.
+
+> The real question isn't "where should we store the key?" — it's "why does the key need to exist at all?"
+
+## MPC Technology Explained
+
+**Multi-Party Computation** (MPC) is a branch of cryptography that allows multiple parties to jointly compute a function over their inputs without revealing those inputs to each other. For digital signatures, this means two or more parties can collaboratively produce a valid signature without any single party ever possessing the complete private key.
+
+### Threshold Signatures vs Multi-Sig
+
+It's important to distinguish MPC threshold signatures from traditional multi-sig:
+
+| Aspect | Multi-Sig | MPC Threshold Signatures |
+|--------|-----------|--------------------------|
+| Key existence | Multiple full keys exist | No complete key ever exists |
+| On-chain footprint | Requires smart contract | Standard EOA transaction |
+| Gas cost | Higher (contract interaction) | Same as normal transaction |
+| Chain compatibility | Varies by chain | Universal (any ECDSA chain) |
+| Privacy | Signers visible on-chain | Indistinguishable from single-signer |
+
+<Callout type="info" title="Key Distinction">
+Multi-sig means multiple complete keys each sign independently. MPC means the key is *never assembled* — partial computations from each share are combined mathematically into a single valid signature.
+</Callout>
+
+### Distributed Key Generation
+
+The foundation of DefiShard's security is **Distributed Key Generation** (DKG). During wallet creation, two independent key shares are generated simultaneously on two separate devices through an interactive cryptographic protocol. At no point — not during generation, not during storage, not during signing — does the complete private key exist.
+
+<Mermaid chart={`
+flowchart LR
+    subgraph traditional ["Traditional Wallet"]
+        direction TB
+        G1[Generate Key] --> S1[Store Key]
+        S1 --> Sign1[Sign TX]
+        Sign1 --> Risk["SINGLE POINT OF FAILURE"]
+    end
+    subgraph mpc ["MPC Wallet (DefiShard)"]
+        direction TB
+        DKG[Distributed Key Gen] --> Share1["Share #1 (Extension)"]
+        DKG --> Share2["Share #2 (Mobile)"]
+        Share1 --> PS1[Partial Sig 1]
+        Share2 --> PS2[Partial Sig 2]
+        PS1 --> Combine[Combine]
+        PS2 --> Combine
+        Combine --> Valid[Valid Signature]
+    end
+`} />
+
+### Why 2-of-2?
+
+DefiShard uses a **2-of-2** threshold — both shares are required for every signature. This is the strongest threshold model: there is no single device that can act alone. Combined with the fact that one share lives in your browser extension and the other on your phone, you get a natural two-factor authentication flow built into the cryptographic protocol itself.
+
+## DefiShard Architecture Overview
+
+DefiShard consists of three components working together: the **Browser Extension**, the **Mobile Authenticator**, and the **MPC Relay Server**.
+
+<Mermaid chart={`
+flowchart TD
+    dApp["dApp (Uniswap, Aave, etc.)"]
+    Blockchain["Blockchain (EVM)"]
+    subgraph ext ["Browser Extension"]
+        Web3["Web3 Provider"]
+        S1["Share #1 Storage"]
+        SE["Signing Engine"]
+    end
+    subgraph mobile ["Mobile Authenticator"]
+        S2["Share #2 Storage"]
+        Bio["Biometric Auth"]
+        TXReview["TX Review UI"]
+    end
+    subgraph relay ["MPC Relay Server"]
+        EC["Encrypted Channel"]
+        MR["Message Router"]
+    end
+    dApp -->|"inject provider"| Web3
+    Web3 --> SE
+    SE <-->|"encrypted msgs"| EC
+    EC <-->|"encrypted msgs"| TXReview
+    TXReview --> Bio
+    Bio --> S2
+    SE --> S1
+    SE -->|"broadcast TX"| Blockchain
+`} />
+
+Each component has a clearly defined role:
+
+- **Browser Extension** — the user-facing wallet. It injects a standard Web3 provider so any dApp works seamlessly. It holds Share #1 and initiates all signing operations.
+- **Mobile Authenticator** — the approval device. It holds Share #2, displays transaction details for review, and requires biometric authentication before participating in signing.
+- **MPC Relay Server** — the coordination layer. It routes encrypted messages between the extension and mobile during signing. It never sees key shares, transaction content, or signatures in plaintext.
+
+<Callout type="success" title="Zero-Knowledge Relay">
+The relay server is a stateless encrypted message router. Even if fully compromised, an attacker gains nothing — all messages are end-to-end encrypted between the extension and mobile. The relay cannot decrypt them, reconstruct shares, or forge signatures.
+</Callout>
+
+## Component Deep Dives
+
+### Browser Extension (Share #1)
+
+The browser extension runs in Chrome, Brave, and Edge. It serves as the primary wallet interface:
+
+- **Web3 Provider Injection** — injects `window.ethereum` so dApps detect DefiShard like any other wallet
+- **Share #1 Storage** — key share is encrypted and stored locally in the extension's sandboxed storage
+- **Signing Engine** — computes partial signatures and combines them with the mobile's partial signature
+- **EVM Compatibility** — supports Ethereum and all EVM-compatible chains (Polygon, Arbitrum, BSC, etc.)
+
+### Mobile Authenticator (Share #2)
+
+The mobile app is the security anchor of the system:
+
+- **Share #2 Storage** — key share encrypted in the device's secure enclave
+- **QR Pairing** — initial setup links extension and mobile via encrypted QR code exchange
+- **Biometric Gate** — Face ID or Touch ID required before Share #2 participates in signing
+- **Transaction Review** — full transaction details displayed for human verification before approval
+
+### MPC Relay Server
+
+The relay exists to solve a practical problem: the browser extension and mobile app cannot communicate directly (NAT, firewalls, different networks). The relay bridges them:
+
+- **Encrypted Channel** — all messages are E2E encrypted; the relay sees only opaque ciphertext
+- **Stateless Design** — no transaction data, shares, or signatures are persisted
+- **Message Routing** — forwards messages between paired devices using session identifiers
+- **Availability** — the relay must be online for signing, but its compromise does not threaten security
+
+## The Pairing Protocol
+
+Before signing can happen, devices must pair. This is a one-time process that establishes the encrypted channel and generates key shares.
+
+<Mermaid chart={`
+sequenceDiagram
+    participant User
+    participant Extension
+    participant Relay
+    participant Mobile
+    User->>Extension: Open extension
+    Extension->>Extension: Generate pairing payload
+    Extension->>User: Display QR code
+    User->>Mobile: Scan QR code
+    Mobile->>Relay: Send encrypted hello
+    Relay->>Extension: Forward encrypted hello
+    Extension->>Relay: Send encrypted ack
+    Relay->>Mobile: Forward encrypted ack
+    Note over Extension,Mobile: Encrypted channel established
+    Extension->>Relay: DKG Round 1
+    Relay->>Mobile: DKG Round 1
+    Mobile->>Relay: DKG Round 2
+    Relay->>Extension: DKG Round 2
+    Extension->>Relay: DKG Round 3
+    Relay->>Mobile: DKG Round 3
+    Note over Extension: Share #1 stored locally
+    Note over Mobile: Share #2 stored in secure enclave
+    Mobile->>User: Wallet ready
+`} />
+
+After pairing completes, both devices hold their respective shares and can participate in the MPC signing protocol. The QR code contains a one-time pairing token and the relay server address — it does not contain any key material.
+
+## The Signing Flow
+
+When a user interacts with a dApp and triggers a transaction, the full MPC signing protocol executes across all three components:
+
+<Mermaid chart={`
+sequenceDiagram
+    participant dApp
+    participant Extension
+    participant Relay
+    participant Mobile
+    participant Blockchain
+    dApp->>Extension: eth_sendTransaction
+    Extension->>Extension: Prepare TX details
+    Extension->>Relay: Signing request (encrypted)
+    Relay->>Mobile: Forward request (encrypted)
+    Mobile->>Mobile: Display TX for review
+    Mobile->>Mobile: Require biometric auth
+    Note over Mobile: User approves with Face ID
+    Mobile->>Mobile: Compute partial sig (Share #2)
+    Mobile->>Relay: Partial signature (encrypted)
+    Relay->>Extension: Forward partial sig (encrypted)
+    Extension->>Extension: Compute partial sig (Share #1)
+    Extension->>Extension: Combine partial signatures
+    Note over Extension: Valid ECDSA signature assembled
+    Extension->>Blockchain: Broadcast signed TX
+    Blockchain->>Extension: TX hash
+    Extension->>dApp: Return TX hash
+`} />
+
+The entire process takes **5-10 seconds** from the moment you click "confirm" in the dApp to the transaction being broadcast. The extra seconds of mobile approval are the difference between security and a potential lifetime of regret.
+
+```typescript
+// Simplified threshold signing pseudocode
+async function signTransaction(tx: Transaction) {
+  const txHash = keccak256(serializeTransaction(tx))
+
+  // Extension computes its partial signature
+  const partialSig1 = computePartialSignature(share1, txHash)
+
+  // Mobile computes its partial signature (after biometric approval)
+  const partialSig2 = await requestMobileApproval(txHash)
+
+  // Combine into a valid ECDSA signature
+  const fullSignature = combinePartialSignatures(partialSig1, partialSig2)
+
+  // The full private key was NEVER reconstructed
+  return broadcastTransaction(tx, fullSignature)
+}
+```
+
+<Callout type="warning" title="Critical Security Property">
+At no point during signing does the full private key get reconstructed. The partial signatures are combined *mathematically* into a valid ECDSA signature. Each partial signature alone is cryptographically useless.
+</Callout>
+
+## Security Analysis
+
+### DefiShard vs Traditional Approaches
+
+| Criteria | Hot Wallet | Hardware Wallet | Multi-Sig | DefiShard (MPC) |
+|----------|-----------|----------------|-----------|-----------------|
+| Key exists as single entity | Yes | Yes (on device) | Yes (per signer) | Never |
+| Single device compromise | Total loss | Total loss | Partial (m-of-n) | No loss |
+| DeFi usability | High | Low (USB required) | Medium (coordination) | High |
+| On-chain cost | Standard | Standard | Higher (contract) | Standard |
+| Chain support | All | All | Varies | All EVM |
+| Phishing resistance | None | Some | Some | Strong (2 devices) |
+| Recovery | Seed phrase | Seed phrase | Complex | Encrypted backup |
+
+### Threat Model
+
+Every wallet security architecture must answer: "What happens when things go wrong?" Here's how DefiShard handles each attack vector:
+
+<Mermaid chart={`
+flowchart TD
+    subgraph attacks ["Attack Vectors"]
+        A1["Malware on Computer"]
+        A2["Phone Stolen"]
+        A3["Phishing Attack"]
+        A4["Compromised Relay"]
+        A5["Man-in-the-Middle"]
+    end
+    subgraph defenses ["Defense Mechanisms"]
+        D1["Only Partial Share Exposed"]
+        D2["Useless Without Extension"]
+        D3["Requires Both Devices"]
+        D4["E2E Encryption"]
+        D5["Cryptographic Channel Binding"]
+    end
+    A1 --> D1
+    A2 --> D2
+    A3 --> D3
+    A4 --> D4
+    A5 --> D5
+    D1 --> Secure["Assets Remain Secure"]
+    D2 --> Secure
+    D3 --> Secure
+    D4 --> Secure
+    D5 --> Secure
+`} />
+
+**Malware on your computer** — an attacker who compromises the browser can extract Share #1. But a single share is mathematically useless without Share #2. They cannot derive the private key, sign transactions, or move funds.
+
+**Phone stolen** — Share #2 is protected by the device's secure enclave and biometric authentication. Even if bypassed, Share #2 alone cannot sign anything without Share #1 on the extension.
+
+**Phishing attack** — unlike traditional wallets where a single approval drains everything, DefiShard requires approval on *both* devices. The mobile displays full transaction details for review, catching malicious transactions before they execute.
+
+**Compromised relay server** — all messages between extension and mobile are end-to-end encrypted. The relay sees opaque ciphertext. A compromised relay cannot read, modify, or forge messages.
+
+**Man-in-the-middle** — the encrypted channel between devices uses cryptographic binding established during QR pairing. An attacker cannot insert themselves into an already-paired session.
+
+<Callout type="success" title="Defense in Depth">
+Each layer of the architecture provides independent security guarantees. The extension's sandboxed storage, the mobile's secure enclave, biometric authentication, E2E encryption, and the MPC protocol itself — even if multiple layers are breached simultaneously, the remaining layers continue to protect your assets.
+</Callout>
+
+## Recovery and Backup
+
+A common concern with any security system: "What if I lose a device?"
+
+DefiShard provides encrypted backup files that can restore your wallet on a new device. During initial setup, users create an encrypted backup that should be stored safely (cloud storage, external drive, or any secure location).
+
+<Mermaid chart={`
+flowchart LR
+    Loss{"Device Lost?"}
+    Loss -->|"Phone Lost"| PhonePath["Install app on new phone"]
+    Loss -->|"Computer Lost"| CompPath["Install extension on new device"]
+    PhonePath --> RestorePhone["Restore from encrypted backup"]
+    CompPath --> RestoreComp["Restore from encrypted backup"]
+    RestorePhone --> RepairPhone["Re-pair with existing extension"]
+    RestoreComp --> RepairComp["Re-pair with existing mobile"]
+    RepairPhone --> Restored["Wallet Fully Restored"]
+    RepairComp --> Restored
+`} />
+
+The backup file contains an encrypted representation of the key share — it cannot be used without the decryption password, and it cannot reconstruct the full private key on its own. Your assets remain safe even if the backup file is intercepted.
+
+## What's Next
+
+DefiShard v1.0.0 is live with the core MPC architecture described above. Here's what's on the roadmap:
+
+- **Transaction Verification** — detailed transaction breakdowns displayed on mobile before signing, with smart contract interaction analysis
+- **Security Audits** — independent assessments by top-tier blockchain security firms, with open-source components available for community review
+- **Threat Detection** — real-time monitoring for suspicious activity, automatic alerts for high-risk transactions and known malicious contracts
+- **iOS App** — currently Android-only with iOS on the waitlist
+- **Social Recovery** — designate trusted contacts who can help recover your wallet without exposing your shares
+
+<Callout type="info" title="Open Source">
+DefiShard is open source under the MIT license. We believe security through obscurity is not security at all. Every component of our MPC implementation is available for review, audit, and contribution.
+</Callout>
+
+---
+
+The architecture is simple in concept and rigorous in implementation: split the key, sign with both halves, never assemble the whole. No single device, no single server, no single point of failure.
+
+Your key never exists. Your assets always safe.
+
+*Questions about our architecture? Reach out at [info@defishard.com](mailto:info@defishard.com)*

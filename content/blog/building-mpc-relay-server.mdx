@@ -1,0 +1,409 @@
+---
+title: "Building the MPC Relay Server: Engineering a Cryptographically Transparent Message Router"
+date: "2026-03-31"
+author: "DeFiShard Team"
+description: "How we designed and built a real-time WebSocket relay server for MPC threshold signing — one that routes encrypted messages between devices while being mathematically unable to learn anything about the keys, signatures, or transactions passing through it."
+tags: ["Engineering", "WebSocket", "Go", "Relay Server", "System Design"]
+---
+
+The hardest part of building DefiShard wasn't the cryptography. It was the plumbing.
+
+Threshold ECDSA requires two devices — a browser extension and a mobile phone — to exchange multiple rounds of messages in real time. These devices sit behind different networks, NATs, and firewalls. They can't talk directly. We needed a relay.
+
+But here's the constraint that made it interesting: **the relay must learn nothing**. Not the key shares, not the transaction details, not even which blockchain the user is interacting with. It must be a dumb pipe — and we had to prove it architecturally, not just claim it.
+
+This post covers how we built that relay server, the engineering decisions behind it, and the problems we hit along the way.
+
+## The Problem
+
+MPC threshold signing is an interactive protocol. For a 2-of-2 scheme, each signing operation requires multiple rounds of message exchange:
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Ext as Browser Extension
+    participant Mob as Mobile App
+    Note over Ext,Mob: Round 1: Exchange commitments
+    Ext->>Mob: Commitment to nonce share
+    Mob->>Ext: Commitment to nonce share
+    Note over Ext,Mob: Round 2: Exchange nonce points
+    Ext->>Mob: Nonce point
+    Mob->>Ext: Nonce point
+    Note over Ext,Mob: Round 3: MtA protocol
+    Ext->>Mob: MtA data
+    Mob->>Ext: MtA data
+    Note over Ext,Mob: Round 4: Exchange partial signatures
+    Ext->>Mob: Partial signature
+    Mob->>Ext: Partial signature
+`} />
+
+The problem: these two devices have no direct communication channel. The extension runs in a browser on a laptop. The mobile app runs on a phone, possibly on cellular data. Different IP addresses, different networks, often behind carrier-grade NAT.
+
+We evaluated three options:
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **WebRTC (P2P)** | No relay needed, lowest latency | STUN/TURN complexity, unreliable NAT traversal, requires signaling server anyway |
+| **Push notifications** | Works when app is backgrounded | Too slow for multi-round protocols (200-500ms per round trip), platform-dependent |
+| **WebSocket relay** | Reliable, low latency, simple client code | Requires a server, introduces a component to secure |
+
+We chose the WebSocket relay. The deciding factor was reliability — MPC signing has strict ordering requirements and needs sub-second round trips. WebRTC's NAT traversal failure rate was unacceptable for a wallet. Push notifications were too slow for a 4+ round protocol. A WebSocket relay gives us deterministic message delivery with under 50ms server-side latency.
+
+<Callout type="info" title="Design Decision">
+We chose to build a "dumb pipe" rather than a "smart relay." The relay knows nothing about cryptography — it routes opaque byte strings between authenticated parties. This means a relay compromise yields exactly zero cryptographic material. The security proof doesn't depend on the relay being honest.
+</Callout>
+
+## Architecture Overview
+
+The relay server is a Go application built on Gin (HTTP) and gorilla/websocket. MongoDB provides persistence for party registration and group membership. The core runtime is entirely in-memory.
+
+<Mermaid chart={`
+flowchart TD
+    subgraph clients ["Client Devices"]
+        Ext["Browser Extension"]
+        Mob["Mobile App"]
+    end
+    subgraph relay ["Relay Server (Go)"]
+        Auth["JWT Auth Middleware"]
+        Handler["WebSocket Handler"]
+        Hub["Hub (Single Goroutine)"]
+        Sessions["Session Manager"]
+        Router["Message Router"]
+    end
+    subgraph persistence ["Persistence"]
+        Mongo["MongoDB"]
+    end
+    Ext -->|"WSS + JWT"| Auth
+    Mob -->|"WSS + JWT"| Auth
+    Auth --> Handler
+    Handler -->|"Register"| Hub
+    Hub --> Sessions
+    Hub --> Router
+    Router -->|"Unicast/Broadcast"| Ext
+    Router -->|"Unicast/Broadcast"| Mob
+    Handler -->|"Group lookup"| Mongo
+`} />
+
+The architecture has three layers:
+
+1. **REST API** — party registration (`POST /party/register`), group management (`POST /group/create`, `POST /group/join`), health checks
+2. **WebSocket endpoint** — `/ws/:group_id/:protocol` — the real-time message channel
+3. **Hub** — the in-memory event loop that routes messages between connected clients
+
+## The Hub Pattern
+
+The heart of the relay is a single-goroutine hub that processes all events sequentially. This is a deliberate choice — it eliminates an entire class of concurrency bugs.
+
+```go
+type Hub struct {
+    Groups     map[string]map[string]*Client  // group_id -> party_id -> client
+    Broadcast  chan models.Message             // incoming messages
+    Register   chan *Client                    // new connections
+    Unregister chan *Client                    // disconnections
+    Sessions   map[string]*Session            // active MPC sessions
+    mu         sync.RWMutex                   // guards map access
+}
+
+func (h *Hub) Run() {
+    for {
+        select {
+        case client := <-h.Register:
+            h.registerClient(client)
+        case client := <-h.Unregister:
+            h.unregisterClient(client)
+        case msg := <-h.Broadcast:
+            h.handleMessage(msg)
+        }
+    }
+}
+```
+
+<Mermaid chart={`
+flowchart LR
+    subgraph events ["Event Channels (buffered: 2048)"]
+        Reg["Register"]
+        Unreg["Unregister"]
+        Bcast["Broadcast"]
+    end
+    subgraph hub ["Hub Goroutine (single thread)"]
+        Select["select loop"]
+        RegHandler["registerClient()"]
+        UnregHandler["unregisterClient()"]
+        MsgHandler["handleMessage()"]
+    end
+    Reg --> Select
+    Unreg --> Select
+    Bcast --> Select
+    Select --> RegHandler
+    Select --> UnregHandler
+    Select --> MsgHandler
+`} />
+
+### Why a Single Goroutine?
+
+The obvious alternative is to handle each connection in its own goroutine with locks. We tried that first. The problem: MPC protocols have ordering constraints. If Round 2 messages arrive before Round 1 messages are processed, the protocol breaks. A single event loop processes events in order, guaranteed.
+
+The tradeoff is throughput — but our relay handles two clients per signing session. The bottleneck is never the hub; it's the network latency between devices. The 2048-buffer channels give us plenty of headroom for bursts.
+
+### Per-Client Goroutines
+
+While the hub is single-threaded, each WebSocket connection gets two goroutines:
+
+```go
+type Client struct {
+    ID          string              // Party ID (compressed public key, 66 hex chars)
+    GroupID     string              // Which MPC group
+    MPCProtocol string              // "keygen", "sign", or "keyrotation"
+    Conn        *websocket.Conn     // The WebSocket connection
+    Send        chan models.Message  // Outbound message buffer (512)
+    Hub         *Hub                // Back-reference to hub
+    Done        chan struct{}        // Shutdown signal
+}
+```
+
+**ReadPump**: Reads JSON messages from the WebSocket, validates fields, stamps the timestamp, and pushes to `Hub.Broadcast`. If the connection drops, it sends itself to `Hub.Unregister`.
+
+**WritePump**: Listens on the `Send` channel and writes messages to the WebSocket. Also sends periodic ping frames (every 10 seconds) to keep the connection alive through proxies and load balancers.
+
+<Mermaid chart={`
+flowchart LR
+    subgraph client ["Per-Client Goroutines"]
+        WS["WebSocket Connection"]
+        RP["ReadPump goroutine"]
+        WP["WritePump goroutine"]
+        SendCh["Send channel (512 buffer)"]
+    end
+    WS -->|"read JSON"| RP
+    RP -->|"Hub.Broadcast"| Hub["Hub"]
+    Hub -->|"route"| SendCh
+    SendCh --> WP
+    WP -->|"write JSON"| WS
+    WP -->|"ping every 10s"| WS
+`} />
+
+This separation means a slow writer never blocks the reader, and a slow reader never blocks writes to other clients. If the `Send` channel fills up (512 messages backed up), the hub unregisters the client — better to disconnect than to let a slow consumer create backpressure.
+
+## Message Protocol
+
+The message format is intentionally minimal:
+
+```go
+type Message struct {
+    GroupID   string    `json:"group_id"`
+    FromID    string    `json:"from_id"`
+    ToID      string    `json:"to_id"`
+    Content   string    `json:"content"`
+    Round     int       `json:"round"`
+    Timestamp time.Time `json:"timestamp,omitempty"`
+}
+```
+
+`Content` is an opaque string. The relay never parses it, never decrypts it, never inspects it. It could be encrypted MPC protocol data, a cat emoji, or the entire works of Shakespeare. The relay doesn't care.
+
+### Routing Logic
+
+Routing is simple and deterministic:
+
+<Mermaid chart={`
+flowchart TD
+    Msg["Incoming Message"]
+    Msg --> IsDone{"content == DONE?"}
+    IsDone -->|"Yes"| HandleDone["handleDoneMessage()"]
+    IsDone -->|"No"| CheckTo{"to_id == 0?"}
+    CheckTo -->|"Yes (broadcast)"| Broadcast["broadcastToGroup()"]
+    CheckTo -->|"No (unicast)"| Unicast["unicastToClient()"]
+    Broadcast --> Skip["Skip sender, deliver to all others"]
+    Unicast --> Target["Deliver to specific party_id"]
+`} />
+
+- **`to_id = "0"`** — broadcast to all other parties in the group (sender excluded)
+- **`to_id = <party_id>`** — unicast to that specific party
+- **`content = "DONE"`** — special: not forwarded, triggers completion logic
+
+This keeps client code simple. During keygen, parties broadcast to everyone. During 2-of-2 signing, they unicast to each other. The relay handles both patterns with the same code path.
+
+### Server-Generated Messages
+
+The relay itself generates exactly four message types:
+
+| Content | When | Meaning |
+|---------|------|---------|
+| `START` | All expected parties connected | Begin the MPC protocol |
+| `END:SUCCESS` | All required parties sent `DONE` | Protocol completed successfully |
+| `END:TIMEOUT` | No activity for 5 minutes | Session expired |
+| `END:INSUFFICIENT_PARTIES` | A party disconnected mid-protocol | Not enough parties to continue |
+
+These are always sent with `from_id` set to the relay's server ID — a 66-character zero string. Clients can distinguish server messages from peer messages by checking this field.
+
+## The Session State Machine
+
+Each MPC session goes through a well-defined lifecycle:
+
+<Mermaid chart={`
+stateDiagram-v2
+    [*] --> Waiting: First client connects
+    Waiting --> Ready: All MaxParticipants connected
+    Ready --> Ready: Messages routed (rounds progress)
+    Ready --> Completed: All RequiredParties sent DONE
+    Ready --> Failed: Client disconnects (insufficient parties)
+    Waiting --> TimedOut: 5 min inactivity
+    Ready --> TimedOut: 5 min inactivity
+    Completed --> [*]: All clients disconnect (cleanup)
+    Failed --> [*]: Cleanup
+    TimedOut --> [*]: Force disconnect + cleanup
+`} />
+
+### The Auto-Start Mechanism
+
+When a session is created (first client connects to a group's WebSocket), the hub initializes a `Session` with `StatusWaiting`. It determines `MaxParticipants` based on the protocol:
+
+- **keygen** / **keyrotation**: requires all `N` parties
+- **sign**: requires only `T` parties (the threshold)
+
+When `len(connected_clients) == MaxParticipants`, the hub transitions to `StatusReady` and broadcasts `START`. This means clients don't need a separate "ready" handshake — they connect and wait. The relay handles coordination.
+
+### The Completion Protocol
+
+When a party finishes its role in the MPC protocol, it sends a message with `content: "DONE"`. The hub counts these:
+
+```go
+func (h *Hub) handleDoneMessage(groupID, partyID string) {
+    session.DoneParties[partyID] = true
+
+    if len(session.DoneParties) >= session.RequiredParties {
+        session.Status = constants.StatusCompleted
+        // Broadcast END:SUCCESS to all parties
+        h.broadcastToAllParties(groupID, endMsg)
+    }
+}
+```
+
+`DONE` messages are never forwarded to other parties — they're consumed by the hub. This prevents a race condition where a party receives `DONE` from its peer before receiving the final protocol message.
+
+<Callout type="warning" title="Why DONE Messages Are Not Forwarded">
+If we forwarded `DONE` to other parties, a fast party could receive its peer's `DONE` before processing the last protocol round. It might then close its connection, causing the hub to emit `END:INSUFFICIENT_PARTIES` before the slow party finishes. By consuming `DONE` at the hub level, we decouple completion signaling from protocol message flow.
+</Callout>
+
+## Failure Handling
+
+This is where relay engineering gets real. Networks are unreliable. Phones lose signal. Users close browser tabs. Every failure mode needs a defined behavior.
+
+### Client Disconnection Mid-Protocol
+
+When a client's WebSocket drops (network failure, tab closed, app backgrounded), the `ReadPump` exits and sends the client to `Hub.Unregister`. The hub checks:
+
+1. Is the session completed? If yes, clean up silently
+2. Are there still enough parties? (`len(remaining) >= RequiredParties`). If no, broadcast `END:INSUFFICIENT_PARTIES` and tear down
+
+There is **no reconnection resume**. If a client disconnects during a signing session, that session is dead. The client must start a new session.
+
+<Callout type="success" title="Why No Reconnection Resume">
+This is a security decision, not a limitation. MPC signing protocols use ephemeral nonces that must never be reused. If we allowed a client to reconnect and resume mid-protocol, we'd need to persist intermediate cryptographic state on the relay — which contradicts our "relay learns nothing" property. A clean abort and fresh restart is always safe. Reuse is never safe.
+</Callout>
+
+### Session Timeout
+
+A background goroutine checks every 30 seconds for sessions where `LastActivity` is older than 5 minutes. Timed-out sessions get `END:TIMEOUT`, then all clients are force-disconnected and the session is cleaned up.
+
+The timeout is deliberately long (5 minutes) to accommodate users who need time to review transaction details on their phone. Active message exchange resets the timer automatically.
+
+### MongoDB Group Timeout
+
+Separate from WebSocket sessions, a `StartTimeoutChecker` runs every 30 seconds to check MongoDB for groups stuck in `waiting` status beyond their configured timeout. These are groups where `POST /group/create` happened but not all parties joined. They're marked as `failed` to prevent orphaned records.
+
+## Authentication
+
+Every interaction requires JWT authentication:
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Client
+    participant REST as REST API
+    participant WS as WebSocket
+    participant Mongo as MongoDB
+    Client->>REST: POST /party/register
+    REST->>Mongo: Store party record
+    REST->>Client: JWT (party_id claim)
+    Client->>REST: POST /group/create (Bearer JWT)
+    REST->>Mongo: Create group
+    REST->>Client: group_id
+    Client->>WS: GET /ws/:group_id/:protocol?token=JWT
+    WS->>WS: Validate JWT, extract party_id
+    WS->>Mongo: Verify party is group member
+    WS->>Client: WebSocket connection established
+`} />
+
+Party IDs are **compressed secp256k1 public keys** — 33 bytes encoded as 66 hex characters, starting with `02` or `03`. This ties the relay identity to the cryptographic identity: your party ID in the relay is derived from the same key material used in the MPC protocol.
+
+```go
+func IsValidPartyID(partyID string) bool {
+    if len(partyID) != 66 {
+        return false
+    }
+    // Must be valid hex
+    for _, char := range partyID {
+        if !isHexChar(char) {
+            return false
+        }
+    }
+    // Must be a valid compressed public key prefix
+    return partyID[0:2] == "02" || partyID[0:2] == "03"
+}
+```
+
+## What the Relay Cannot Do
+
+This is the most important section. The relay's security properties come from what it **cannot** do:
+
+| Action | Can the relay do it? | Why not? |
+|--------|---------------------|----------|
+| Read key shares | No | Never sent to relay — shares stay on devices |
+| Read transaction details | No | `content` is E2E encrypted by clients |
+| Forge signatures | No | Doesn't have any key shares |
+| Modify messages | Detectable | Clients verify protocol messages cryptographically |
+| Replay old messages | Detectable | Round numbers and session IDs prevent replay |
+| Correlate users to addresses | No | Party IDs are public keys, not wallet addresses |
+| Decrypt `content` | No | Encrypted with keys exchanged during QR pairing |
+
+The relay is **not trusted** in the security model. It's an **availability dependency** (signing fails if the relay is down) but not a **security dependency** (signing is safe even if the relay is compromised). This distinction is critical.
+
+<Callout type="success" title="The Security Guarantee">
+If an attacker fully compromises the relay server — root access, memory dump, packet capture, everything — they obtain: JWT tokens (which authorize WebSocket connections but contain no key material), group membership lists, and opaque encrypted blobs. They cannot sign transactions, derive private keys, or even determine which blockchain or protocol the users are interacting with.
+</Callout>
+
+## Performance Characteristics
+
+For a 2-of-2 signing operation (4 rounds):
+
+| Metric | Value |
+|--------|-------|
+| Server-side message routing latency | Under 1ms per message |
+| Total round-trip time (server contribution) | ~4ms for 4 rounds |
+| Dominant latency | Network RTT between client and relay (~20-100ms per hop) |
+| Max message size | 1MB (enforced in ReadPump) |
+| Client send buffer | 512 messages |
+| Hub event buffer | 2048 per channel |
+| Heartbeat interval | 10 seconds |
+| Connection timeout | 4 minutes (read/write deadlines) |
+| Session timeout | 5 minutes inactivity |
+
+The relay adds negligible latency. The user-perceived signing time (5-10 seconds) is dominated by: network RTT to relay, mobile push notification delivery, user reviewing the transaction, and biometric authentication. The relay itself is never the bottleneck.
+
+## What We'd Do Differently
+
+Every engineering project has hindsight. Here's ours:
+
+**1. Session persistence.** We built a file-based session manager (`session_manager.go`) but never deployed it. If the relay server restarts during a signing operation, all active sessions are lost. For a production deployment, we'd want Redis-backed session state with TTLs so that a rolling restart doesn't force all active signers to retry.
+
+**2. Horizontal scaling.** The current hub is a single goroutine on a single server. For thousands of concurrent sessions, we'd need to shard by group_id — either via consistent hashing across multiple relay instances, or by using Redis pub/sub as the message bus between hub instances.
+
+**3. Rate limiting at the WebSocket level.** We built a token-bucket rate limiter (`rate_limiter.go`) but it's not wired into the hub. HTTP endpoints have rate limiting via `ulule/limiter`, but WebSocket messages are currently unlimited. A misbehaving client could flood the hub channel.
+
+**4. Observability.** Prometheus metrics are defined (`metrics.go`) but not exposed. In production, we'd want per-group message counts, round duration histograms, and connection lifecycle metrics to detect degraded sessions before users notice.
+
+---
+
+The relay server is the least glamorous component of DefiShard. It doesn't do cryptography. It doesn't hold secrets. It doesn't even understand the messages passing through it. That's exactly the point.
+
+The best infrastructure is invisible. It does one thing, does it reliably, and makes it structurally impossible to become a liability.
+
+*Questions about our relay architecture? Reach out at [info@defishard.com](mailto:info@defishard.com)*

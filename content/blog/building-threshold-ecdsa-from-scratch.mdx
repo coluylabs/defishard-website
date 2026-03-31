@@ -1,0 +1,521 @@
+---
+title: "Building Threshold ECDSA from Scratch: The Cryptography Behind DefiShard"
+date: "2026-03-31"
+author: "DeFiShard Team"
+description: "A deep technical walkthrough of the cryptographic primitives powering DefiShard — from elliptic curve fundamentals through Shamir's Secret Sharing to a full 2-of-2 threshold ECDSA implementation where the private key never exists."
+tags: ["Cryptography", "ECDSA", "DKG", "Threshold Signatures", "Engineering"]
+---
+
+When we set out to build DefiShard, the core engineering challenge was clear: **produce valid ECDSA signatures across two independent devices without ever assembling the private key**. Not encrypted. Not split-and-recombined. Never existing — at any point, on any device, in any form.
+
+This post walks through exactly how we solved that. We'll start from elliptic curve fundamentals, build up through secret sharing, arrive at a full distributed key generation protocol, and end with threshold ECDSA signing. Every diagram and code snippet reflects the actual protocol we implemented.
+
+## Elliptic Curve Foundations
+
+Ethereum (and all EVM chains) use the **secp256k1** elliptic curve for digital signatures. The curve is defined by:
+
+```
+y² = x³ + 7  (mod p)
+```
+
+where `p` is a 256-bit prime. The key properties we rely on:
+
+- There exists a **generator point** `G` on the curve
+- Multiplying `G` by a scalar `k` gives another point `k·G` — this is fast to compute
+- Given `k·G`, recovering `k` is computationally infeasible — this is the **Elliptic Curve Discrete Logarithm Problem** (ECDLP)
+
+This asymmetry is the foundation of all elliptic curve cryptography: going forward (scalar multiplication) is cheap, going backward (discrete log) is practically impossible.
+
+```typescript
+// The core asymmetry
+const privateKey = randomScalar()        // secret scalar k
+const publicKey = curve.multiply(G, privateKey) // k·G = public point
+
+// Given publicKey, recovering privateKey is infeasible
+// This is what makes the entire system work
+```
+
+### Standard ECDSA Signing
+
+In a normal single-key ECDSA signature, the signer who knows the private key `d` produces a signature `(r, s)` for a message hash `e`:
+
+1. Pick a random nonce `k`
+2. Compute `R = k·G` and set `r = R.x mod n`
+3. Compute `s = k⁻¹ · (e + r·d) mod n`
+4. The signature is `(r, s)`
+
+Verification uses only the **public key** `Q = d·G`:
+
+```
+u₁ = e·s⁻¹ mod n
+u₂ = r·s⁻¹ mod n
+R' = u₁·G + u₂·Q
+valid if R'.x ≡ r (mod n)
+```
+
+<Callout type="info" title="The Problem We're Solving">
+Standard ECDSA requires the signer to know `d` — the full private key. Our goal is to produce the exact same `(r, s)` signature without any single party ever knowing `d`. The signature must be indistinguishable from one produced by a single signer.
+</Callout>
+
+## Shamir's Secret Sharing
+
+The first building block is **Shamir's Secret Sharing** (1979). It allows a secret to be split into `n` shares such that any `t` shares can reconstruct the secret, but `t-1` shares reveal nothing.
+
+The insight is elegant: a polynomial of degree `t-1` is uniquely determined by `t` points.
+
+For our 2-of-2 scheme, we use a polynomial of degree 1 (a line):
+
+```
+f(x) = a₀ + a₁·x  (mod n)
+```
+
+where `a₀` is the secret value. Two points on this line are sufficient to reconstruct `a₀` via **Lagrange interpolation**.
+
+<Mermaid chart={`
+flowchart LR
+    subgraph polynomial ["Degree-1 Polynomial f(x) = secret + a₁·x"]
+        Secret["f(0) = secret"]
+        Share1["f(1) = Share #1"]
+        Share2["f(2) = Share #2"]
+    end
+    Secret -.->|"never computed directly"| Share1
+    Secret -.->|"never computed directly"| Share2
+    Share1 -->|"Lagrange interpolation"| Reconstruct["Reconstruct f(0)"]
+    Share2 -->|"Lagrange interpolation"| Reconstruct
+`} />
+
+### Lagrange Interpolation
+
+Given two points `(1, y₁)` and `(2, y₂)` on a degree-1 polynomial, the secret `f(0)` is recovered as:
+
+```
+f(0) = y₁ · λ₁ + y₂ · λ₂
+```
+
+where the **Lagrange coefficients** are:
+
+```
+λ₁ = (0 - 2) / (1 - 2) = 2
+λ₂ = (0 - 1) / (2 - 1) = -1
+```
+
+So `f(0) = 2·y₁ - y₂`. These coefficients are public and fixed for any 2-of-2 scheme — they depend only on the evaluation points, not the secret.
+
+```typescript
+function lagrangeCoefficient(
+  i: number,
+  points: number[],
+  x: number,
+  order: bigint
+): bigint {
+  let num = 1n
+  let den = 1n
+  for (const j of points) {
+    if (j !== i) {
+      num = (num * BigInt(x - j)) % order
+      den = (den * BigInt(i - j)) % order
+    }
+  }
+  return (num * modInverse(den, order)) % order
+}
+
+// For 2-of-2 with points [1, 2], evaluating at x=0:
+// λ₁ = (0-2)/(1-2) = 2
+// λ₂ = (0-1)/(2-1) = -1 ≡ (n-1) mod n
+```
+
+<Callout type="warning" title="Critical Property">
+Shamir's scheme is **information-theoretically secure**: a single share reveals *zero* information about the secret. This isn't a computational assumption — it's a mathematical proof. Even with unlimited computing power, one share alone is useless.
+</Callout>
+
+## Feldman's Verifiable Secret Sharing
+
+Standard Shamir's has a problem: a malicious dealer could distribute inconsistent shares. **Feldman's VSS** (1987) adds verification by publishing commitments to the polynomial coefficients.
+
+For a polynomial `f(x) = a₀ + a₁·x`, the dealer publishes:
+
+```
+C₀ = a₀·G    (commitment to the secret)
+C₁ = a₁·G    (commitment to the coefficient)
+```
+
+Each party receiving share `sᵢ = f(i)` can verify:
+
+```
+sᵢ·G == C₀ + i·C₁
+```
+
+This works because of the **homomorphic property** of elliptic curve scalar multiplication:
+
+```
+f(i)·G = (a₀ + a₁·i)·G = a₀·G + i·(a₁·G) = C₀ + i·C₁
+```
+
+Each party can verify their share is consistent with the published commitments without learning the secret `a₀` — they only see `a₀·G`, not `a₀` itself.
+
+```typescript
+interface FeldmanVSS {
+  commitments: Point[]  // [a₀·G, a₁·G]
+  share: bigint         // f(i) for this party
+}
+
+function verifyShare(
+  vss: FeldmanVSS,
+  partyIndex: number,
+  curve: EllipticCurve
+): boolean {
+  const lhs = curve.multiply(G, vss.share)  // sᵢ·G
+
+  // C₀ + i·C₁
+  const rhs = curve.add(
+    vss.commitments[0],
+    curve.multiply(vss.commitments[1], BigInt(partyIndex))
+  )
+
+  return curve.pointEquals(lhs, rhs)
+}
+```
+
+## Distributed Key Generation
+
+Now we combine these primitives into a full **DKG protocol**. The challenge: we want both parties to contribute randomness to the key, so neither party alone determines the private key.
+
+### The Protocol
+
+In our 2-of-2 DKG, each party acts as **both dealer and recipient**:
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Ext as Extension (Party 1)
+    participant Relay
+    participant Mob as Mobile (Party 2)
+    Note over Ext: Generate random polynomial<br/>f₁(x) = a₁₀ + a₁₁·x
+    Note over Mob: Generate random polynomial<br/>f₂(x) = a₂₀ + a₂₁·x
+    Ext->>Relay: Commitments [a₁₀·G, a₁₁·G]
+    Relay->>Mob: Forward commitments
+    Mob->>Relay: Commitments [a₂₀·G, a₂₁·G]
+    Relay->>Ext: Forward commitments
+    Ext->>Relay: Encrypted share f₁(2) for Mobile
+    Relay->>Mob: Forward encrypted share
+    Mob->>Relay: Encrypted share f₂(1) for Extension
+    Relay->>Ext: Forward encrypted share
+    Note over Ext: Verify f₂(1) against commitments
+    Note over Mob: Verify f₁(2) against commitments
+    Note over Ext: Final share: s₁ = f₁(1) + f₂(1)
+    Note over Mob: Final share: s₂ = f₁(2) + f₂(2)
+    Note over Ext,Mob: Public key: Q = (a₁₀ + a₂₀)·G
+`} />
+
+**Step by step:**
+
+1. **Each party generates a random polynomial** of degree 1
+   - Extension: `f₁(x) = a₁₀ + a₁₁·x`
+   - Mobile: `f₂(x) = a₂₀ + a₂₁·x`
+
+2. **Each party publishes Feldman commitments** to their polynomial coefficients
+
+3. **Each party sends an encrypted evaluation** of their polynomial to the other party
+   - Extension sends `f₁(2)` to Mobile
+   - Mobile sends `f₂(1)` to Extension
+
+4. **Each party verifies** the received share against the published commitments
+
+5. **Each party computes their final share** by summing the evaluations:
+   - Extension: `s₁ = f₁(1) + f₂(1)`
+   - Mobile: `s₂ = f₁(2) + f₂(2)`
+
+The combined secret key is `d = a₁₀ + a₂₀` — which **neither party knows**. They only know their own `a₁₀` or `a₂₀`, never the sum. The public key `Q = d·G = (a₁₀ + a₂₀)·G` is computable by both parties from the published commitments: `Q = C₁₀ + C₂₀`.
+
+```typescript
+async function distributedKeyGeneration(
+  party: PartyRole,
+  channel: EncryptedChannel
+): Promise<{ share: bigint; publicKey: Point }> {
+  // Step 1: Generate random polynomial
+  const a0 = randomScalar()  // secret contribution
+  const a1 = randomScalar()  // random coefficient
+  const poly = [a0, a1]
+
+  // Step 2: Publish Feldman commitments
+  const commitments = poly.map(coeff => curve.multiply(G, coeff))
+  await channel.send({ type: 'commitments', data: commitments })
+
+  // Step 3: Receive other party's commitments
+  const otherCommitments = await channel.receive('commitments')
+
+  // Step 4: Exchange encrypted shares
+  const otherIndex = party === 'extension' ? 2 : 1
+  const myIndex = party === 'extension' ? 1 : 2
+  const shareForOther = evaluatePolynomial(poly, otherIndex)
+  await channel.sendEncrypted({ type: 'share', data: shareForOther })
+
+  const receivedShare = await channel.receiveEncrypted('share')
+
+  // Step 5: Verify received share against commitments
+  if (!verifyFeldmanShare(receivedShare, myIndex, otherCommitments)) {
+    throw new Error('Share verification failed — abort DKG')
+  }
+
+  // Step 6: Compute final share and public key
+  const myShare = evaluatePolynomial(poly, myIndex)
+  const finalShare = (myShare + receivedShare) % curveOrder
+
+  const publicKey = curve.add(commitments[0], otherCommitments[0])
+
+  return { share: finalShare, publicKey }
+}
+```
+
+<Callout type="success" title="Key Property">
+After DKG completes, neither party knows the private key `d = a₁₀ + a₂₀`. Each party contributed randomness independently. Even a malicious party cannot bias the key — they can only influence their own `aᵢ₀` contribution, and the other party's contribution remains uniformly random.
+</Callout>
+
+### Why This Matters for Security
+
+The DKG protocol guarantees several properties:
+
+| Property | Guarantee |
+|----------|-----------|
+| **Correctness** | Both shares lie on the same degree-1 polynomial; they can produce valid signatures |
+| **Secrecy** | Neither party learns the other's secret contribution `aᵢ₀` |
+| **Verifiability** | Feldman commitments let each party verify received shares are consistent |
+| **Unbiasability** | Neither party can influence the final key beyond their own random contribution |
+| **Robustness** | If verification fails, the protocol aborts cleanly — no partial state is leaked |
+
+## Threshold ECDSA Signing
+
+This is the hardest part of the entire system. Recall the standard ECDSA signature equation:
+
+```
+s = k⁻¹ · (e + r·d) mod n
+```
+
+We need to compute this where:
+- `d` is secret-shared as `(s₁, s₂)` — neither party knows `d`
+- `k` must also be secret-shared — if either party knows the full nonce `k`, they can derive `d` from the final signature
+- The modular inverse `k⁻¹` must be computed without revealing `k`
+
+### The Nonce Problem
+
+This is where threshold ECDSA gets subtle. In standard ECDSA, the signer picks a random `k`, computes `R = k·G`, and uses `k⁻¹` in the signature equation. If we naively split `k` into shares `k₁ + k₂ = k`, we face a problem:
+
+**Computing `k⁻¹` from shares of `k` is not straightforward.** The inverse of a sum is not the sum of inverses: `(k₁ + k₂)⁻¹ ≠ k₁⁻¹ + k₂⁻¹`.
+
+<Mermaid chart={`
+flowchart TD
+    subgraph problem ["The Nonce Inversion Problem"]
+        K["k = k₁ + k₂"]
+        KInv["Need: k⁻¹ mod n"]
+        Naive["k₁⁻¹ + k₂⁻¹ ≠ k⁻¹"]
+    end
+    subgraph solution ["Solution: Multiplicative Masking"]
+        Gamma["Both parties pick random γ₁, γ₂"]
+        Mask["Compute δ = k · γ where γ = γ₁ + γ₂"]
+        Reveal["Reveal δ (masked product)"]
+        Invert["k⁻¹ = γ · δ⁻¹"]
+    end
+    problem --> solution
+`} />
+
+### Multiplicative-to-Additive Share Conversion
+
+The standard approach uses a technique called **multiplicative-to-additive (MtA) share conversion**. The idea:
+
+1. Both parties hold additive shares of `k`: Extension has `k₁`, Mobile has `k₂`, where `k₁ + k₂ = k`
+2. Both parties also generate additive shares of a random value `γ`: `γ₁ + γ₂ = γ`
+3. Using an MtA protocol, they convert their additive shares of `k` and `γ` into additive shares of the **product** `δ = k·γ`
+4. They reveal `δ` (which leaks nothing about `k` because `γ` masks it)
+5. Now `k⁻¹ = γ · δ⁻¹` — and each party holds a share of `γ`, and `δ⁻¹` is public
+
+### The Full Signing Protocol
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Ext as Extension (s₁, k₁)
+    participant Relay
+    participant Mob as Mobile (s₂, k₂)
+    Note over Ext,Mob: Phase 1 — Nonce Generation
+    Note over Ext: Pick random k₁, γ₁
+    Note over Mob: Pick random k₂, γ₂
+    Ext->>Relay: Commitment to k₁·G
+    Relay->>Mob: Forward commitment
+    Mob->>Relay: Commitment to k₂·G
+    Relay->>Ext: Forward commitment
+    Note over Ext,Mob: Phase 2 — MtA Protocol
+    Ext->>Relay: MtA round 1 (encrypted)
+    Relay->>Mob: Forward
+    Mob->>Relay: MtA round 2 (encrypted)
+    Relay->>Ext: Forward
+    Note over Ext: Holds additive share of k·γ
+    Note over Mob: Holds additive share of k·γ
+    Note over Ext,Mob: Phase 3 — Reveal and Sign
+    Ext->>Relay: δ₁ (share of k·γ)
+    Relay->>Mob: Forward
+    Mob->>Relay: δ₂ (share of k·γ)
+    Relay->>Ext: Forward
+    Note over Ext,Mob: Both compute δ = δ₁ + δ₂, then δ⁻¹
+    Note over Ext,Mob: R = k₁·G + k₂·G, r = R.x mod n
+    Note over Ext: σ₁ = k₁·γ₁·δ⁻¹·e + k₁·γ₁·δ⁻¹·r·s₁
+    Note over Mob: σ₂ = k₂·γ₂·δ⁻¹·e + k₂·γ₂·δ⁻¹·r·s₂
+    Ext->>Relay: Partial signature σ₁
+    Relay->>Mob: Forward
+    Mob->>Relay: Partial signature σ₂
+    Relay->>Ext: Forward
+    Note over Ext: s = σ₁ + σ₂ mod n
+    Note over Ext: Final signature (r, s)
+`} />
+
+The final signature `(r, s)` is **mathematically identical** to one produced by a single signer holding `d`. No verifier can distinguish it from a standard ECDSA signature — because it *is* a standard ECDSA signature.
+
+```typescript
+async function thresholdSign(
+  txHash: bigint,
+  myShare: bigint,
+  partyIndex: number,
+  channel: EncryptedChannel
+): Promise<ECDSASignature> {
+  // Phase 1: Generate nonce share
+  const k_i = randomScalar()
+  const gamma_i = randomScalar()
+  const R_i = curve.multiply(G, k_i)
+
+  // Exchange nonce commitments
+  await channel.send({ type: 'nonce_commitment', data: hash(R_i) })
+  const otherCommitment = await channel.receive('nonce_commitment')
+
+  await channel.send({ type: 'nonce_point', data: R_i })
+  const R_other = await channel.receive('nonce_point')
+
+  // Verify commitment
+  if (hash(R_other) !== otherCommitment) {
+    throw new Error('Nonce commitment mismatch — possible attack')
+  }
+
+  // Phase 2: MtA for k·γ
+  const { delta_i } = await multiplicativeToAdditive(
+    k_i, gamma_i, channel
+  )
+
+  // Phase 3: Reveal masked product
+  await channel.send({ type: 'delta', data: delta_i })
+  const delta_other = await channel.receive('delta')
+  const delta = (delta_i + delta_other) % curveOrder
+  const deltaInv = modInverse(delta, curveOrder)
+
+  // Compute R and r
+  const R = curve.add(R_i, R_other)
+  const r = R.x % curveOrder
+
+  // Compute partial signature
+  const lambda = lagrangeCoefficient(partyIndex, [1, 2], 0, curveOrder)
+  const sigma_i = (
+    (k_i * gamma_i % curveOrder) * deltaInv % curveOrder *
+    (txHash + r * myShare * lambda % curveOrder)
+  ) % curveOrder
+
+  // Exchange partial signatures
+  await channel.send({ type: 'partial_sig', data: sigma_i })
+  const sigma_other = await channel.receive('partial_sig')
+
+  const s = (sigma_i + sigma_other) % curveOrder
+
+  // Verify before returning
+  if (!verifySignature(txHash, { r, s }, publicKey)) {
+    throw new Error('Combined signature invalid — protocol error')
+  }
+
+  return { r, s }
+}
+```
+
+<Callout type="warning" title="Nonce Security">
+The nonce `k` must be generated with the same care as the private key. If the full nonce is ever revealed — or if the same nonce is used twice — the private key can be derived from the signature. This is why nonce shares are committed before being revealed, and why we use a coin-flipping protocol to ensure neither party can bias the nonce.
+</Callout>
+
+## Security Analysis of the Protocol
+
+### What an Attacker Learns
+
+Consider each attack scenario against our threshold signing protocol:
+
+| Scenario | What Attacker Obtains | Can They Sign? | Can They Derive `d`? |
+|----------|----------------------|----------------|---------------------|
+| Compromise Extension | `s₁` (key share), `k₁` (nonce share) | No — needs `s₂` | No — `s₁` alone reveals nothing about `d` |
+| Compromise Mobile | `s₂` (key share), `k₂` (nonce share) | No — needs `s₁` | No — `s₂` alone reveals nothing about `d` |
+| Compromise Relay | Encrypted ciphertext only | No — cannot decrypt | No — sees only opaque bytes |
+| Compromise Extension + Relay | `s₁` + encrypted messages | No — still needs `s₂` | No — relay data is encrypted |
+| Observe all signatures | Public `(r, s)` values | No | No — standard ECDSA security |
+
+<Mermaid chart={`
+flowchart TD
+    subgraph assumptions ["Security Assumptions"]
+        ECDLP["ECDLP Hardness (secp256k1)"]
+        SSS["Shamir's Secret Sharing (information-theoretic)"]
+        E2E["E2E Encryption (AES-256-GCM)"]
+        Commitment["Hash Commitment Binding"]
+    end
+    subgraph guarantees ["Protocol Guarantees"]
+        NoKey["Private key never exists"]
+        NoNonce["Full nonce never exists on one device"]
+        NoForge["Cannot forge signatures with one share"]
+        NoLearn["Cannot learn other party's share from protocol messages"]
+    end
+    ECDLP --> NoKey
+    ECDLP --> NoForge
+    SSS --> NoLearn
+    SSS --> NoKey
+    E2E --> NoLearn
+    Commitment --> NoNonce
+`} />
+
+### Simulation-Based Security
+
+The formal security argument follows the **simulation paradigm**: for any adversary who corrupts one party, there exists a simulator that can produce a transcript indistinguishable from a real protocol execution, without knowing the honest party's input. This means the corrupted party learns nothing beyond what it could compute from its own input and the final output.
+
+In practical terms: if you compromise the Extension, everything you see during signing could have been generated by a simulator that doesn't know Mobile's share. The protocol messages carry zero information about the other share.
+
+## Engineering Decisions
+
+Building the protocol is one thing. Making it work reliably across a browser extension and a mobile app over an unreliable network is another. Some key decisions:
+
+### Deterministic Nonce Derivation
+
+We use **RFC 6979** style deterministic nonce derivation seeded with both the share and the message hash, combined with additional randomness. This prevents nonce reuse (which would be catastrophic) while still allowing the MtA protocol to work:
+
+```typescript
+function deriveNonceShare(
+  share: bigint,
+  messageHash: bigint,
+  extraEntropy: Uint8Array
+): bigint {
+  const hmac = createHmac('sha256', bigintToBytes(share))
+  hmac.update(bigintToBytes(messageHash))
+  hmac.update(extraEntropy)  // additional randomness
+  return bytesToBigint(hmac.digest()) % curveOrder
+}
+```
+
+### Abort Handling
+
+If any protocol step fails verification — commitment mismatch, Feldman check failure, invalid partial signature — the protocol **aborts immediately** with no retry. Partial state is discarded. This is deliberate: retrying with the same nonce state could leak information. A fresh signing session must be initiated.
+
+### Message Ordering
+
+The relay server must deliver messages in order. We use monotonically increasing sequence numbers within each signing session, and each message includes a session identifier and step counter. Out-of-order or duplicate messages are rejected.
+
+## What This Enables
+
+The result of all this cryptographic machinery: DefiShard produces **standard ECDSA signatures** that are indistinguishable from single-signer signatures, while providing guarantees that no traditional wallet can offer:
+
+- The private key `d` never exists — not in memory, not on disk, not during signing
+- Compromising a single device yields a share that is information-theoretically useless
+- The relay server is a pure encrypted message forwarder — it has no access to cryptographic material
+- Signatures are valid on any EVM chain — no smart contracts, no on-chain overhead, no privacy leakage
+
+> Every transaction signed by DefiShard is a small proof that practical cryptography can eliminate classes of vulnerabilities rather than just mitigate them.
+
+---
+
+*The cryptographic protocol described here is based on established research in threshold ECDSA, particularly building on the work of Gennaro & Goldfeder (2019) and Lindell (2017). DefiShard's implementation is open source under the MIT license.*
+
+*Technical questions or want to discuss the protocol? Reach out at [info@defishard.com](mailto:info@defishard.com)*

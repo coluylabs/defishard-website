@@ -1,0 +1,329 @@
+---
+title: "Backup, Restore, and Staying Safe: The Complete DefiShard Security Guide"
+date: "2026-03-31"
+author: "DeFiShard Team"
+description: "A practical guide to backing up your DefiShard wallet, restoring on a new device, and security best practices — plus a look under the hood at the KEK/DEK encryption architecture that protects your backup files."
+tags: ["Guide", "Security", "Backup", "Tutorial"]
+---
+
+Your private key never exists with DefiShard. But your key **shares** do — one on your browser extension, one on your phone. If you lose a device without a backup, that share is gone. And without both shares, your wallet is permanently inaccessible.
+
+This guide covers everything you need to know about protecting your DefiShard wallet: how backup works, how to restore on a new device, and the security practices that keep your assets safe.
+
+## Why Backup Matters in an MPC Wallet
+
+Traditional wallets give you a seed phrase — 12 or 24 words that can regenerate your private key. Lose the phrase, lose everything. Have it stolen, lose everything.
+
+DefiShard doesn't have seed phrases. Your wallet exists as two independent key shares on two separate devices. This eliminates the seed phrase attack vector entirely, but it means **you need a backup of each share** in case a device is lost, damaged, or reset.
+
+<Callout type="warning" title="Critical">
+Create your backup immediately after setting up your wallet. If you lose your phone before backing up, your mobile key share is gone permanently. DefiShard cannot recover it — we never have access to your shares.
+</Callout>
+
+## How DefiShard Backup Works
+
+DefiShard uses a **KEK/DEK encryption architecture** — the same pattern used by enterprise key management systems. Here's what that means in plain terms:
+
+<Mermaid chart={`
+flowchart TD
+    subgraph device ["Your Device (Secure Storage)"]
+        MasterDEK["Master DEK (Data Encryption Key)"]
+        Keyshare["Your Key Share"]
+    end
+    subgraph backup_process ["Backup Process"]
+        RandomDEK["Generate Random Backup DEK"]
+        Decrypt["Decrypt share with Master DEK"]
+        ReEncrypt["Re-encrypt share with Backup DEK"]
+    end
+    subgraph password_protection ["Password Protection (Optional)"]
+        Password["Your Password"]
+        PBKDF2["PBKDF2 (100,000 rounds)"]
+        KEK["KEK (Key Encryption Key)"]
+        EncDEK["Encrypt Backup DEK with KEK"]
+    end
+    subgraph backup_file ["Backup File (.json)"]
+        ProtectedDEK["Encrypted Backup DEK"]
+        EncShare["Encrypted Key Share"]
+        Meta["Wallet Metadata"]
+    end
+    MasterDEK --> Decrypt
+    Keyshare --> Decrypt
+    Decrypt --> ReEncrypt
+    RandomDEK --> ReEncrypt
+    ReEncrypt --> EncShare
+    Password --> PBKDF2
+    PBKDF2 --> KEK
+    RandomDEK --> EncDEK
+    KEK --> EncDEK
+    EncDEK --> ProtectedDEK
+    ProtectedDEK --> backup_file
+    EncShare --> backup_file
+`} />
+
+**The key insight**: your Master DEK (the key that encrypts your share on-device) **never leaves your device**. During backup, a fresh random DEK is generated specifically for the backup file. Your share is decrypted with the Master DEK and re-encrypted with the backup DEK. This means even if someone intercepts your backup file, they cannot use it to access the shares stored on your device — they use different encryption keys.
+
+### Two Backup Modes
+
+DefiShard offers two levels of backup protection:
+
+**1. Standard Backup (without password)**
+
+The backup DEK is stored in plaintext in the backup file. The key share is still encrypted with AES-256-GCM — it can only be decrypted with the DEK that's in the same file. This mode relies on the security of wherever you store the file (Google Drive encryption, iCloud encryption, etc.).
+
+**2. Password-Protected Backup (recommended)**
+
+Your password is run through **PBKDF2** with 100,000 iterations and SHA-256 to derive a Key Encryption Key (KEK). The KEK encrypts the backup DEK using AES-256-GCM. The result: even if someone gets your backup file, they cannot decrypt it without your password. The 100,000 iteration count makes brute-force attacks computationally expensive.
+
+<Callout type="success" title="Recommendation">
+Always use password-protected backup. Choose a strong password that you can remember — at least 12 characters with a mix of letters, numbers, and symbols. This password is your last line of defense if your backup file is compromised.
+</Callout>
+
+## Step-by-Step: Creating a Backup
+
+### On Mobile (Share #2)
+
+1. Open the DefiShard mobile app
+2. Go to **Settings** or tap the wallet menu
+3. Select **Backup Wallet**
+4. Choose **Password-Protected** (recommended) or **Standard**
+5. If password-protected: enter and confirm your backup password
+6. The app generates your encrypted backup file
+7. The native share sheet opens — save to:
+   - Google Drive
+   - iCloud Drive
+   - Dropbox
+   - Files app (local storage)
+   - Email to yourself
+   - Any other storage option
+
+Your backup file is named `defishard-{address}-{timestamp}.json` — for example, `defishard-0x1a2b3c4d5e-1711878400000.json`.
+
+### On Extension (Share #1)
+
+1. Open the DefiShard extension in your browser
+2. Go to **Settings** or **Manage Wallets**
+3. Select **Backup / Restore**
+4. Choose your backup type
+5. Download the encrypted backup file
+6. Store it in a safe location
+
+<Callout type="info" title="Both Shares Need Backup">
+You need separate backups for the extension (Share #1) and mobile (Share #2). Each device holds a different share. Back up both to ensure full recoverability.
+</Callout>
+
+## Step-by-Step: Restoring from Backup
+
+### Scenario 1: Lost Phone (Restore Share #2)
+
+<Mermaid chart={`
+sequenceDiagram
+    participant User
+    participant NewPhone as New Phone
+    participant BackupFile as Backup File
+    participant Extension as Existing Extension
+    User->>NewPhone: Install DefiShard app
+    NewPhone->>User: Select "Restore from Backup"
+    User->>BackupFile: Open backup file
+    BackupFile->>NewPhone: Load encrypted backup
+    NewPhone->>User: Enter backup password
+    NewPhone->>NewPhone: PBKDF2 derive KEK
+    NewPhone->>NewPhone: Decrypt backup DEK
+    NewPhone->>NewPhone: Decrypt key share
+    NewPhone->>NewPhone: Re-encrypt with new Master DEK
+    NewPhone->>NewPhone: Store in secure enclave
+    NewPhone->>User: Share #2 restored
+    User->>Extension: Re-pair via QR code
+    Note over Extension,NewPhone: Wallet fully operational
+`} />
+
+1. Install DefiShard on your new phone
+2. Choose **Restore from Backup**
+3. Select your backup file from cloud storage or local files
+4. Enter your backup password (if password-protected)
+5. The app decrypts and restores your key share
+6. Open the browser extension and re-pair with the new phone via QR code
+7. Your wallet is fully operational again
+
+### Scenario 2: Lost Computer (Restore Share #1)
+
+1. Install the DefiShard extension on your new browser
+2. Go to **Backup / Restore**
+3. Select your extension backup file
+4. Enter your backup password
+5. The extension restores your key share
+6. Re-pair with your existing mobile app
+7. Your wallet is fully operational again
+
+### Scenario 3: Both Devices Lost
+
+If you have backups for both shares:
+
+1. Install the extension on a new browser, restore Share #1
+2. Install the mobile app on a new phone, restore Share #2
+3. Pair the two devices via QR code
+4. Your wallet is fully restored
+
+<Callout type="danger" title="If You Have No Backup">
+If you lose a device and have no backup for that share, the wallet is permanently inaccessible. DefiShard has no recovery mechanism without the backup — this is by design. We never hold your shares and cannot restore them. This is why creating a backup immediately after setup is critical.
+</Callout>
+
+## What's Inside a Backup File
+
+Your backup file is a JSON document. Here's what it contains (and what it doesn't):
+
+| Field | What It Is | Risk If Exposed |
+|-------|-----------|----------------|
+| `version` | Backup format version | None |
+| `encryption` | `"none"` or `"password-kek"` | None |
+| `encryptedDek` | DEK encrypted with your password (KEK) | Cannot decrypt without password |
+| `kekSalt` | Random salt for PBKDF2 | Useless without password |
+| `kekIv` | Initialization vector for KEK encryption | Useless without password |
+| `wallets[].encryptedKeyshare` | Your key share encrypted with DEK | Cannot decrypt without DEK |
+| `wallets[].iv` | Initialization vector per wallet | Useless without DEK |
+| `wallets[].metadata` | Wallet address, public key | Public information anyway |
+
+**What the backup file does NOT contain:**
+- Your Master DEK (never leaves the device)
+- Your plaintext key share (always encrypted)
+- Your backup password (used to derive KEK, never stored)
+- Your other share (each device backs up only its own share)
+- Any seed phrase or mnemonic (doesn't exist in MPC wallets)
+
+### Encryption Stack
+
+<Mermaid chart={`
+flowchart LR
+    subgraph layer1 ["Layer 1: Password"]
+        PW["Your Password"]
+        PBKDF["PBKDF2 SHA-256 100K rounds"]
+        KEK2["KEK (AES-256)"]
+    end
+    subgraph layer2 ["Layer 2: Backup DEK"]
+        RDEK["Random Backup DEK"]
+        AESGCM1["AES-256-GCM"]
+    end
+    subgraph layer3 ["Layer 3: Key Share"]
+        Share["Key Share Data"]
+        AESGCM2["AES-256-GCM"]
+        Encrypted["Encrypted Share"]
+    end
+    PW --> PBKDF
+    PBKDF --> KEK2
+    KEK2 -->|"encrypts"| RDEK
+    RDEK -->|"encrypts"| AESGCM2
+    Share --> AESGCM2
+    AESGCM2 --> Encrypted
+`} />
+
+To access your key share from a backup file, an attacker would need to:
+
+1. **Crack your password** — PBKDF2 with 100,000 iterations makes brute-force expensive
+2. **Decrypt the DEK** — AES-256-GCM with the password-derived KEK
+3. **Decrypt the key share** — AES-256-GCM with the decrypted DEK
+4. **Also have the other share** — one share alone is cryptographically useless
+
+That's three layers of encryption plus the fundamental MPC property that a single share reveals nothing about the private key.
+
+## Security Best Practices
+
+### Backup Storage
+
+**Do:**
+- Store backups in at least **two separate locations** (e.g., Google Drive + external USB drive)
+- Use password-protected backups always
+- Test your backup by restoring on a secondary device before you need it
+- Keep backups for both the extension and mobile app
+- Update your backup after creating new wallets
+
+**Don't:**
+- Don't store backup files on the same device as the share
+- Don't share backup files over unencrypted channels (plain SMS, unencrypted email)
+- Don't use simple passwords ("123456", "password", your birthday)
+- Don't store your backup password in the same location as the backup file
+
+### Password Management
+
+Your backup password is critical. Here's how to handle it:
+
+| Approach | Security Level | Convenience |
+|----------|---------------|-------------|
+| Password manager (1Password, Bitwarden) | High | High |
+| Written down in a safe/lockbox | High | Low |
+| Memorized strong passphrase | High | Medium |
+| Stored in Notes app on phone | Low | High |
+| Same password as email/social | Very Low | High |
+
+<Callout type="info" title="Passphrase Tip">
+A passphrase like `correct-horse-battery-staple-mpc` is both stronger and easier to remember than `P@ssw0rd!`. Four or more random words strung together create a password that's resistant to brute-force attacks while being human-memorable.
+</Callout>
+
+### Device Security
+
+Your key shares are only as safe as the devices holding them:
+
+**Phone:**
+- Enable biometric lock (Face ID / fingerprint)
+- Keep your OS updated
+- Don't install apps from unknown sources
+- Enable device encryption (on by default on modern Android/iOS)
+- Enable remote wipe capability (Find My iPhone / Find My Device)
+
+**Browser:**
+- Use a dedicated browser profile for DeFi (separate from casual browsing)
+- Review installed extensions regularly — remove anything you don't recognize
+- Keep your browser updated
+- Don't install extensions from untrusted sources
+- Use a strong browser profile password
+
+### What to Do If a Device Is Compromised
+
+If you suspect a device has been compromised (malware, theft, unauthorized access):
+
+<Mermaid chart={`
+flowchart TD
+    Compromised{"Device Compromised?"}
+    Compromised -->|"Phone"| PhoneSteps["1. Do NOT panic - one share alone is useless"]
+    Compromised -->|"Computer"| CompSteps["1. Do NOT panic - one share alone is useless"]
+    PhoneSteps --> Transfer["2. Transfer assets to a new wallet"]
+    CompSteps --> Transfer
+    Transfer --> NewWallet["3. Create new DefiShard wallet on clean devices"]
+    NewWallet --> MoveAssets["4. Move assets from old wallet to new wallet"]
+    MoveAssets --> Backup2["5. Create fresh backups for new wallet"]
+    Backup2 --> Revoke["6. Remote wipe compromised device"]
+`} />
+
+**The critical point**: even if a device is compromised, the attacker only has one share. They cannot sign transactions or move your funds. You have time to act. Don't panic — methodically create a new wallet on clean devices and transfer your assets.
+
+## Frequently Asked Questions
+
+**Can DefiShard recover my wallet if I lose my backup?**
+
+No. DefiShard never has access to your key shares. This is a core security property — if we could recover your shares, so could an attacker who compromised our systems. Your backup is your responsibility.
+
+**Can I have multiple backups?**
+
+Yes. You can create as many backups as you want, with different passwords. Each backup is independent. We recommend at least two copies in separate locations.
+
+**Does my backup expire?**
+
+No. Backup files are valid indefinitely. The encryption doesn't have a time component.
+
+**What if I change my phone but keep the same computer?**
+
+Restore your mobile backup on the new phone, then re-pair with the existing extension. Your wallet address stays the same.
+
+**What if I forget my backup password?**
+
+If your backup is password-protected and you forget the password, that backup file is permanently inaccessible. The PBKDF2 key derivation is designed to make password recovery computationally infeasible. This is why we recommend using a password manager.
+
+**Is it safe to store backups on cloud storage?**
+
+Yes, especially with password-protected backups. Your backup file is encrypted with AES-256-GCM. Cloud providers like Google Drive and iCloud add their own encryption layer on top. An attacker would need to compromise your cloud account AND crack your backup password AND have access to your other share.
+
+---
+
+Security is a practice, not a product. DefiShard gives you the architecture — MPC threshold signatures, distributed key shares, encrypted backups. But the final layer of protection is you: creating backups, choosing strong passwords, securing your devices, and staying vigilant.
+
+Your key never exists. Make sure your shares always do.
+
+*Need help with backup or recovery? Reach out at [info@defishard.com](mailto:info@defishard.com)*
